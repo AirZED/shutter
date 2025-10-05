@@ -2,7 +2,11 @@
 module gallery_nft::gallery_nft;
 
 use std::string::{Self, String};
+use sui::display;
 use sui::event;
+use sui::object::{Self, UID};
+use sui::transfer;
+use sui::tx_context::{Self, TxContext};
 
 /// NFT that gates access to a Walrus-stored image
 public struct GalleryNFT has key, store {
@@ -13,6 +17,8 @@ public struct GalleryNFT has key, store {
     description: String,
     /// Walrus blob ID for the image
     walrus_blob_id: String,
+    /// Standard URL for explorer image display
+    url: String,
     /// Creator's address
     creator: address,
     /// Access level (e.g., "public", "premium", "exclusive")
@@ -33,13 +39,15 @@ public struct NFTMinted has copy, drop {
 const EInvalidBlobId: u64 = 1;
 const EInvalidAccessTier: u64 = 2;
 
+/// Walrus aggregator gateway for testnet
+const WALRUS_AGGREGATOR: vector<u8> = b"https://aggregator.walrus-testnet.walrus.space/v1/blobs/";
+
 /// Mint a new Gallery NFT
-#[allow(lint(self_transfer))]
 public fun mint(
-    name: vector<u8>,
-    description: vector<u8>,
-    walrus_blob_id: vector<u8>,
-    access_tier: vector<u8>,
+    name: String,
+    description: String,
+    walrus_blob_id: String,
+    access_tier: String,
     ctx: &mut TxContext,
 ) {
     let sender = tx_context::sender(ctx);
@@ -50,13 +58,20 @@ public fun mint(
     assert!(!std::vector::is_empty(&walrus_blob_id), EInvalidBlobId);
     assert!(!std::vector::is_empty(&access_tier), EInvalidAccessTier);
 
+    // Build standard URL for image display
+    let url = std::vector::empty();
+    std::vector::append(&mut url, WALRUS_AGGREGATOR);
+    std::vector::append(&mut url, walrus_blob_id);
+    let url_str = string::utf8(url);
+
     let nft = GalleryNFT {
         id: nft_uid,
-        name: string::utf8(name),
-        description: string::utf8(description),
-        walrus_blob_id: string::utf8(walrus_blob_id),
+        name,
+        description,
+        walrus_blob_id,
+        url: url_str, // Key addition for explorers
         creator: sender,
-        access_tier: string::utf8(access_tier),
+        access_tier,
         created_at: tx_context::epoch(ctx),
     };
 
@@ -71,12 +86,12 @@ public fun mint(
 }
 
 /// Transfer NFT to another address
-public  fun transfer_nft(nft: GalleryNFT, recipient: address, _ctx: &mut TxContext) {
+public fun transfer_nft(nft: GalleryNFT, recipient: address, _ctx: &mut TxContext) {
     transfer::public_transfer(nft, recipient);
 }
 
 /// Update NFT description (only owner can do this)
-public  fun update_description(
+public fun update_description(
     nft: &mut GalleryNFT,
     new_description: vector<u8>,
     _ctx: &mut TxContext,
@@ -85,12 +100,13 @@ public  fun update_description(
 }
 
 /// Burn/delete the NFT (only owner can do this)
-public  fun burn(nft: GalleryNFT, _ctx: &mut TxContext) {
+public fun burn(nft: GalleryNFT, _ctx: &mut TxContext) {
     let GalleryNFT {
         id,
         name: _,
         description: _,
         walrus_blob_id: _,
+        url: _,
         creator: _,
         access_tier: _,
         created_at: _,
@@ -99,39 +115,31 @@ public  fun burn(nft: GalleryNFT, _ctx: &mut TxContext) {
 }
 
 // === View Functions ===
+public fun name(nft: &GalleryNFT): String { nft.name }
 
-/// Get NFT name
-public fun name(nft: &GalleryNFT): String {
-    nft.name
-}
+public fun description(nft: &GalleryNFT): String { nft.description }
 
-/// Get NFT description
-public fun description(nft: &GalleryNFT): String {
-    nft.description
-}
+public fun walrus_blob_id(nft: &GalleryNFT): String { nft.walrus_blob_id }
 
-/// Get Walrus blob ID
-public fun walrus_blob_id(nft: &GalleryNFT): String {
-    nft.walrus_blob_id
-}
+public fun url(nft: &GalleryNFT): String { nft.url } // Expose for explorers
 
-/// Get creator address
-public fun creator(nft: &GalleryNFT): address {
-    nft.creator
-}
+public fun creator(nft: &GalleryNFT): address { nft.creator }
 
-/// Get access tier
-public fun access_tier(nft: &GalleryNFT): String {
-    nft.access_tier
-}
+public fun access_tier(nft: &GalleryNFT): String { nft.access_tier }
 
-/// Get creation timestamp
-public fun created_at(nft: &GalleryNFT): u64 {
-    nft.created_at
-}
+public fun created_at(nft: &GalleryNFT): u64 { nft.created_at }
 
 /// Check if an address owns an NFT with a specific access tier
-/// (This would be called off-chain to gate access)
 public fun has_access_tier(nft: &GalleryNFT, required_tier: String): bool {
     nft.access_tier == required_tier
+}
+
+/// Optional: Display template for rich rendering in wallets/explorers
+public entry fun init_display(display: &mut display::Display<GalleryNFT>, ctx: &mut TxContext) {
+    let builder = display::new<GalleryNFT>(ctx);
+    display::add(&mut builder, string::utf8(b"name"), string::utf8(b"{name}"));
+    display::add(&mut builder, string::utf8(b"description"), string::utf8(b"{description}"));
+    display::add(&mut builder, string::utf8(b"image_url"), string::utf8(b"{url}"));
+    display::add(&mut builder, string::utf8(b"creator"), string::utf8(b"{creator}"));
+    display::update_version(display, builder);
 }
