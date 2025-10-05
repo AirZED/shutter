@@ -4,9 +4,7 @@ module gallery_nft::gallery_nft;
 use std::string::{Self, String};
 use sui::display;
 use sui::event;
-use sui::object::{Self, UID};
-use sui::transfer;
-use sui::tx_context::{Self, TxContext};
+use sui::package;
 
 /// NFT that gates access to a Walrus-stored image
 public struct GalleryNFT has key, store {
@@ -39,10 +37,8 @@ public struct NFTMinted has copy, drop {
 const EInvalidBlobId: u64 = 1;
 const EInvalidAccessTier: u64 = 2;
 
-/// Walrus aggregator gateway for testnet
-const WALRUS_AGGREGATOR: vector<u8> = b"https://aggregator.walrus-testnet.walrus.space/v1/blobs/";
-
 /// Mint a new Gallery NFT
+#[allow(lint(self_transfer))]
 public fun mint(
     name: String,
     description: String,
@@ -55,14 +51,12 @@ public fun mint(
     let nft_id = object::uid_to_address(&nft_uid);
 
     // Validate inputs
-    assert!(!std::vector::is_empty(&walrus_blob_id), EInvalidBlobId);
-    assert!(!std::vector::is_empty(&access_tier), EInvalidAccessTier);
+    assert!(walrus_blob_id.is_empty(), EInvalidBlobId);
+    assert!(!access_tier.is_empty(), EInvalidAccessTier);
 
     // Build standard URL for image display
-    let url = std::vector::empty();
-    std::vector::append(&mut url, WALRUS_AGGREGATOR);
-    std::vector::append(&mut url, walrus_blob_id);
-    let url_str = string::utf8(url);
+    let mut url_str = b"https://aggregator.walrus-testnet.walrus.space/v1/blobs/".to_string();
+    url_str.append(walrus_blob_id);
 
     let nft = GalleryNFT {
         id: nft_uid,
@@ -78,8 +72,8 @@ public fun mint(
     event::emit(NFTMinted {
         nft_id,
         creator: sender,
-        walrus_blob_id: string::utf8(walrus_blob_id),
-        access_tier: string::utf8(access_tier),
+        walrus_blob_id,
+        access_tier,
     });
 
     transfer::public_transfer(nft, sender);
@@ -134,12 +128,13 @@ public fun has_access_tier(nft: &GalleryNFT, required_tier: String): bool {
     nft.access_tier == required_tier
 }
 
-/// Optional: Display template for rich rendering in wallets/explorers
-public entry fun init_display(display: &mut display::Display<GalleryNFT>, ctx: &mut TxContext) {
-    let builder = display::new<GalleryNFT>(ctx);
-    display::add(&mut builder, string::utf8(b"name"), string::utf8(b"{name}"));
-    display::add(&mut builder, string::utf8(b"description"), string::utf8(b"{description}"));
-    display::add(&mut builder, string::utf8(b"image_url"), string::utf8(b"{url}"));
-    display::add(&mut builder, string::utf8(b"creator"), string::utf8(b"{creator}"));
-    display::update_version(display, builder);
+#[allow(lint(self_transfer))]
+public fun init_display(publisher: &package::Publisher, ctx: &mut TxContext) {
+    let mut display = display::new<GalleryNFT>(publisher, ctx);
+    display::add(&mut display, string::utf8(b"name"), string::utf8(b"{name}"));
+    display::add(&mut display, string::utf8(b"description"), string::utf8(b"{description}"));
+    display::add(&mut display, string::utf8(b"image_url"), string::utf8(b"{url}"));
+    display::add(&mut display, string::utf8(b"creator"), string::utf8(b"{creator}"));
+    display::update_version(&mut display);
+    transfer::public_transfer(display, ctx.sender());
 }
