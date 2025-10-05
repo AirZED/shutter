@@ -6,6 +6,7 @@ import {
 } from "@mysten/dapp-kit";
 import { getFullnodeUrl, SuiClient } from "@mysten/sui/client";
 import { Transaction } from "@mysten/sui/transactions";
+import axios from "axios";  
 
 function Mint() {
   const account = useCurrentAccount();
@@ -33,7 +34,7 @@ function Mint() {
 
   // Your deployed Gallery NFT contract
   const GALLERY_NFT_PACKAGE =
-    "0x0a30e0fc2edc10595a20edc73e5404a09e839a31d63aa70056f49f44b3e1b8c1";
+    "0x721ecbbdec56cce40cc616fca1ebb04f282e896fc09222f9666d7b599ba9501e";
 
   const [accessTier, setAccessTier] = useState<string>("public");
 
@@ -63,53 +64,47 @@ function Mint() {
   }, [account]);
 
   // Handle file upload using HTTP API
-  const handleUpload = async () => {
-    if (!selectedFile || !account) return;
+ const handleUpload = async () => {
+   if (!selectedFile || !account) return;
 
-    setUploadStatus("Uploading to Walrus...");
+   setUploadStatus("Uploading to Walrus...");
 
-    try {
-      // Upload to Walrus publisher
-      const formData = new FormData();
-      formData.append("file", selectedFile);
+   try {
+     // Upload to Walrus publisher using Axios
+     const response = await axios.put(
+       `${PUBLISHER}/v1/blobs?epochs=5&deletable=true`,
+       selectedFile,
+       {
+         headers: {
+           "Content-Type": selectedFile.type || "image/jpeg", // Fallback for MIME
+         },
+       }
+     );
 
-      const response = await fetch(
-        `${PUBLISHER}/v1/blobs?epochs=5&deletable=true`,
-        {
-          method: "PUT",
-          body: selectedFile,
-          headers: {
-            "Content-Type": selectedFile.type || "application/octet-stream",
-          },
-        }
-      );
+     const result = response.data;
+     console.log("Upload result:", result);
 
-      if (!response.ok) {
-        throw new Error(
-          `Upload failed: ${response.status} ${response.statusText}`
-        );
-      }
+     if (result.newlyCreated) {
+       const blob = result.newlyCreated.blobObject;
+       setBlobId(blob.blobId);
+       setUploadStatus(`Upload successful! Blob ID: ${blob.blobId}`);
+     } else if (result.alreadyCertified) {
+       setBlobId(result.alreadyCertified.blobId);
+       setUploadStatus(
+         `Blob already exists! Blob ID: ${result.alreadyCertified.blobId}`
+       );
+     }
 
-      const result = await response.json();
-      console.log("Upload result:", result);
-
-      if (result.newlyCreated) {
-        const blob = result.newlyCreated.blobObject;
-        setBlobId(blob.blobId);
-        setUploadStatus(`Upload successful! Blob ID: ${blob.blobId}`);
-      } else if (result.alreadyCertified) {
-        setBlobId(result.alreadyCertified.blobId);
-        setUploadStatus(
-          `Blob already exists! Blob ID: ${result.alreadyCertified.blobId}`
-        );
-      }
-
-      fetchBalances();
-    } catch (error: any) {
-      console.error("Upload error:", error);
-      setUploadStatus(`Upload failed: ${error.message}`);
-    }
-  };
+     fetchBalances();
+   } catch (error: any) {
+     console.error("Upload error:", error.response?.data || error.message);
+     setUploadStatus(
+       `Upload failed: ${error.response?.status || "Unknown"} - ${
+         error.response?.data?.message || error.message
+       }`
+     );
+   }
+ };
 
   // Handle file selection
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
