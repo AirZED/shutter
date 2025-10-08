@@ -9,7 +9,11 @@ import GalleryDetail from "./pages/GalleryDetail";
 import NotFound from "./pages/NotFound";
 
 // Sui Imports
-import { createNetworkConfig, SuiClientProvider, WalletProvider as SuiWalletProvider } from "@mysten/dapp-kit";
+import {
+  createNetworkConfig,
+  SuiClientProvider,
+  WalletProvider as SuiWalletProvider,
+} from "@mysten/dapp-kit";
 import { getFullnodeUrl } from "@mysten/sui/client";
 import "@mysten/dapp-kit/dist/index.css";
 
@@ -27,6 +31,7 @@ import {
 } from "@solana/wallet-adapter-wallets";
 import { clusterApiUrl } from "@solana/web3.js";
 import Mint from "./pages/MInt";
+import MintSolana from "./pages/MintSolana";
 
 const queryClient = new QueryClient();
 const { networkConfig } = createNetworkConfig({
@@ -47,11 +52,9 @@ const SolanaSetup = ({ children }: { children: React.ReactNode }) => {
   ];
 
   return (
-    <ConnectionProvider  endpoint={endpoint}>
+    <ConnectionProvider endpoint={endpoint}>
       <SolanaWalletProvider wallets={wallets} autoConnect>
-        <WalletModalProvider >
-          {children}
-        </WalletModalProvider>
+        <WalletModalProvider>{children}</WalletModalProvider>
       </SolanaWalletProvider>
     </ConnectionProvider>
   );
@@ -63,7 +66,9 @@ const App = () => (
       <SuiWalletProvider autoConnect={true}>
         {/* Solana wallets setup */}
         <SolanaSetup>
-          <WalletProvider> {/* Your custom WalletProvider, if it wraps additional logic */}
+          <WalletProvider>
+            {" "}
+            {/* Your custom WalletProvider, if it wraps additional logic */}
             <TooltipProvider>
               <Toaster />
               <Sonner />
@@ -72,6 +77,7 @@ const App = () => (
                   <Route path="/" element={<Index />} />
                   <Route path="/gallery/:id" element={<GalleryDetail />} />
                   <Route path="/mint" element={<Mint />} />
+                  <Route path="/mint/solana" element={<MintSolana />} />
                   {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                   <Route path="*" element={<NotFound />} />
                 </Routes>
