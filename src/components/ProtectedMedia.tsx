@@ -131,7 +131,7 @@ export const ProtectedMedia = ({
         }
 
         const commonProps = {
-            ref: mediaRef as any,
+            ref: mediaRef as React.RefObject<HTMLImageElement | HTMLVideoElement | HTMLAudioElement>,
             className: "w-full h-full object-cover rounded-lg",
             onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
             onDragStart: (e: React.DragEvent) => e.preventDefault(),

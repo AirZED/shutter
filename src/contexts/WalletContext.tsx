@@ -134,7 +134,7 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
                 });
 
                 // Paginate to get all owned objects
-                let allOwnedObjects: any[] = [];
+                let allOwnedObjects: Array<{ data?: { objectId?: string } }> = [];
                 let cursor: string | undefined = undefined;
                 do {
                     const ownedObjects = await suiClient.getOwnedObjects({
@@ -160,14 +160,14 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
                         });
 
                         const data = objectDetails.data;
-                        if (data?.type?.includes(collectionAddress) || (data?.content?.fields as any)?.collection_id === collectionAddress) {
+                        if (data?.type?.includes(collectionAddress) || (data?.content && 'fields' in data.content && (data.content.fields as Record<string, unknown>)?.collection_id === collectionAddress)) {
                             // Check traits if required
                             if (requiredTraits) {
-                                const fields = data.content?.fields as any;
+                                const fields = (data.content && 'fields' in data.content) ? data.content.fields as Record<string, unknown> : {};
                                 const traits: Record<string, string> = {};
                                 if (fields.attributes && Array.isArray(fields.attributes)) {
-                                    fields.attributes.forEach((attr: any) => {
-                                        if (attr.key && attr.value) {
+                                    fields.attributes.forEach((attr: Record<string, unknown>) => {
+                                        if (attr.key && attr.value && typeof attr.key === 'string' && typeof attr.value === 'string') {
                                             traits[attr.key] = attr.value;
                                         }
                                     });

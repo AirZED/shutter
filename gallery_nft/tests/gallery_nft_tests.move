@@ -14,6 +14,18 @@ const DUMMY_AGGREGATOR: vector<u8> = b"https://aggregator.walrus-testnet.walrus.
 
 // === Test Helpers ===
 
+/// Concatenate two byte vectors
+fun concat_vec(a: vector<u8>, b: vector<u8>): vector<u8> {
+    let mut result = a;
+    let mut i = 0;
+    let len = std::vector::length(&b);
+    while (i < len) {
+        std::vector::push_back(&mut result, *std::vector::borrow(&b, i));
+        i = i + 1;
+    };
+    result
+}
+
 fun setup_test(): Scenario {
     let mut scenario = ts::begin(ADMIN);
     {
@@ -254,11 +266,12 @@ fun test_different_access_tiers() {
     let mut scenario = setup_test();
 
     let tiers = vector[utf8(b"public"), utf8(b"premium"), utf8(b"exclusive"), utf8(b"vip")];
+    let blob_ids = vector[b"BlobId0", b"BlobId1", b"BlobId2", b"BlobId3"];
     let mut i = 0;
 
     while (i < std::vector::length(&tiers)) {
         let tier = *std::vector::borrow(&tiers, i);
-        let blob_id = concat_vec(b"TestBlobId", std::vector::borrow(&tiers, i)); // Dummy blob ID per tier
+        let blob_id = *std::vector::borrow(&blob_ids, i);
 
         ts::next_tx(&mut scenario, USER1);
         {

@@ -3,7 +3,7 @@ import { SuiClient } from '@mysten/sui/client';
 import { getFullnodeUrl } from '@mysten/sui/client';
 
 // Solana configuration
-export const SOLANA_RPC_URL = 'https://api.devnet.solana.com';
+export const SOLANA_RPC_URL = 'https://api.testnet.solana.com';
 export const solanaConnection = new Connection(SOLANA_RPC_URL, 'confirmed');
 
 // Sui configuration

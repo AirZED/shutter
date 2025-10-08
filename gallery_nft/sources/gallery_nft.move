@@ -111,6 +111,49 @@ public fun burn(nft: GalleryNFT, _ctx: &mut TxContext) {
     } = nft;
     object::delete(id);
 }
+
+// === Getter Functions ===
+
+/// Get NFT name
+public fun name(nft: &GalleryNFT): String {
+    nft.name
+}
+
+/// Get NFT description
+public fun description(nft: &GalleryNFT): String {
+    nft.description
+}
+
+/// Get Walrus blob ID
+public fun walrus_blob_id(nft: &GalleryNFT): String {
+    nft.walrus_blob_id
+}
+
+/// Get full image URL
+public fun url(nft: &GalleryNFT): String {
+    nft.url
+}
+
+/// Get creator address
+public fun creator(nft: &GalleryNFT): address {
+    nft.creator
+}
+
+/// Get access tier
+public fun access_tier(nft: &GalleryNFT): String {
+    nft.access_tier
+}
+
+/// Get creation timestamp
+public fun created_at(nft: &GalleryNFT): u64 {
+    nft.created_at
+}
+
+/// Check if NFT has a specific access tier
+public fun has_access_tier(nft: &GalleryNFT, tier: String): bool {
+    nft.access_tier == tier
+}
+
 // Updated init_display to use image_url
 public fun init_display(publisher: &package::Publisher, ctx: &mut TxContext) {
     let mut display = display::new<GalleryNFT>(publisher, ctx);
