@@ -4,12 +4,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Lock, Sparkles, Loader2, CheckCircle } from "lucide-react";
+import { Lock, Sparkles, Loader2, CheckCircle, Wallet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
 import { SuiClient, getFullnodeUrl } from "@mysten/sui/client";
 import { GALLERY_NFT_PACKAGEID } from "@/lib/constants";
+import { useWallet } from "@/contexts/WalletContext";
 
 interface MintNFTPromptProps {
     galleryTitle: string;
@@ -25,6 +26,7 @@ export const MintNFTPrompt = ({
     onCancel,
 }: MintNFTPromptProps) => {
     const account = useCurrentAccount();
+    const { connection, connectWallet } = useWallet();
     const { mutate: signAndExecuteTransaction, isPending } = useSignAndExecuteTransaction();
     const { toast } = useToast();
     const [nftName, setNftName] = useState(`${galleryTitle} Access Pass`);
@@ -34,9 +36,28 @@ export const MintNFTPrompt = ({
     const [mintStatus, setMintStatus] = useState<string>("");
 
     const AGGREGATOR = "https://aggregator.walrus-testnet.walrus.space";
+    const isWalletConnected = connection?.isConnected || false;
 
     const handleMint = async () => {
-        if (!account || !nftName.trim() || !nftDescription.trim()) {
+        // Check if wallet is connected first
+        if (!isWalletConnected || !account) {
+            toast({
+                title: "Wallet Not Connected",
+                description: "Please connect your wallet to mint the NFT.",
+                variant: "destructive",
+            });
+            // Try to connect wallet
+            if (connectWallet) {
+                try {
+                    await connectWallet();
+                } catch (error) {
+                    console.error("Error connecting wallet:", error);
+                }
+            }
+            return;
+        }
+
+        if (!nftName.trim() || !nftDescription.trim()) {
             toast({
                 title: "Error",
                 description: "Please fill in NFT name and description",
@@ -207,10 +228,37 @@ export const MintNFTPrompt = ({
                     </div>
                 )}
 
+                {!isWalletConnected && (
+                    <div className="p-4 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                        <div className="flex items-start gap-3">
+                            <Wallet className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mt-0.5" />
+                            <div>
+                                <p className="text-sm font-medium text-yellow-900 dark:text-yellow-100">
+                                    Wallet Not Connected
+                                </p>
+                                <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                                    Please connect your wallet to mint an access pass NFT.
+                                </p>
+                                {connectWallet && (
+                                    <Button
+                                        onClick={connectWallet}
+                                        variant="outline"
+                                        size="sm"
+                                        className="mt-2"
+                                    >
+                                        <Wallet className="mr-2 h-3 w-3" />
+                                        Connect Wallet
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 <div className="flex gap-3">
                     <Button
                         onClick={handleMint}
-                        disabled={isPending || !nftName.trim() || !nftDescription.trim()}
+                        disabled={isPending || !isWalletConnected || !nftName.trim() || !nftDescription.trim()}
                         className="flex-1"
                     >
                         {isPending ? (
@@ -221,7 +269,7 @@ export const MintNFTPrompt = ({
                         ) : (
                             <>
                                 <Sparkles className="mr-2 h-4 w-4" />
-                                Mint Access Pass
+                                {isWalletConnected ? "Mint Access Pass" : "Connect Wallet First"}
                             </>
                         )}
                     </Button>

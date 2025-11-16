@@ -7,7 +7,7 @@ import { GalleryChatPanel } from "@/components/GalleryChatPanel";
 import { UploadModal } from "@/components/UploadModal";
 import { MintNFTPrompt } from "@/components/MintNFTPrompt";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Lock, Loader2, Trash2, Plus, RefreshCw } from "lucide-react";
+import { ArrowLeft, Lock, Loader2, Trash2, Plus, RefreshCw, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useGalleries, Gallery } from "@/hooks/useGalleries";
 import { useWallet } from "@/contexts/WalletContext";
@@ -151,16 +151,17 @@ const GalleryDetail = () => {
     loadGallery();
   }, [id, galleries, connection?.address]);
 
-  // Check NFT access when gallery loads (if locked)
+  // Check NFT access when gallery loads (only for media viewing, not gallery viewing)
+  // Galleries are always visible - NFT is only required for viewing media
   useEffect(() => {
     const checkAccess = async () => {
-      if (!gallery || !isWalletConnected) {
+      if (!gallery) {
         setHasAccess(null);
         return;
       }
 
-      // If gallery is not locked, user has access
-      if (!gallery.isLocked) {
+      // If gallery is not locked, user has access to media
+      if (!gallery.isLocked && !gallery.requiredNFT) {
         setHasAccess(true);
         return;
       }
@@ -172,7 +173,13 @@ const GalleryDetail = () => {
         return;
       }
 
-      // Check NFT access
+      // Only check NFT access if wallet is connected
+      if (!isWalletConnected) {
+        setHasAccess(null); // Will prompt to connect wallet when trying to view media
+        return;
+      }
+
+      // Check NFT access for media viewing
       setCheckingAccess(true);
       try {
         const hasNFT = await verifyNFT(
@@ -180,9 +187,7 @@ const GalleryDetail = () => {
           gallery.requiredTraits
         );
         setHasAccess(hasNFT);
-        if (!hasNFT) {
-          setShowMintPrompt(true);
-        }
+        // Don't show mint prompt automatically - let them see the gallery first
       } catch (error) {
         console.error("Error checking access:", error);
         setHasAccess(false);
@@ -232,42 +237,58 @@ const GalleryDetail = () => {
   })) || [];
 
   const handleMediaClick = async (media: any) => {
-    if (gallery.isLocked && !isWalletConnected) {
-      toast({
-        title: "Connect Wallet",
-        description: "Please connect your wallet to access this content",
-        variant: "destructive",
-      });
-      return;
-    }
-
     // If user is the gallery owner, they always have access
     const isOwner = connection?.address?.toLowerCase() === gallery.owner?.toLowerCase();
 
-    // Verify NFT access if gallery is locked and user is not the owner
-    if (gallery.isLocked && isWalletConnected && !isOwner) {
+    // Check if media requires NFT access (gallery is locked or has required NFT)
+    const requiresNFT = gallery.isLocked || gallery.requiredNFT;
+
+    if (requiresNFT && !isOwner) {
+      // If wallet not connected, show mint prompt (which will prompt to connect wallet)
+      if (!isWalletConnected) {
+        setShowMintPrompt(true);
+        toast({
+          title: "NFT Required",
+          description: "Please connect your wallet to mint an access pass NFT.",
+          variant: "default",
+        });
+        return;
+      }
+
+      // Verify NFT access
       try {
-        // Check for NFTs from the gallery_nft package
-        const hasAccess = await verifyNFT(gallery.requiredNFT || GALLERY_NFT_PACKAGEID, gallery.requiredTraits);
+        const hasAccess = await verifyNFT(
+          gallery.requiredNFT || GALLERY_NFT_PACKAGEID,
+          gallery.requiredTraits
+        );
+
         if (!hasAccess) {
+          // Show mint prompt - user doesn't have the required NFT
+          setShowMintPrompt(true);
+          // Store the media they tried to access so we can open it after minting
+          setSelectedMedia(media);
           toast({
-            title: "Access Denied",
-            description: "You don't have the required NFT to access this gallery.",
-            variant: "destructive",
+            title: "NFT Required",
+            description: "You need an NFT to view this media. Would you like to mint an access pass?",
+            variant: "default",
           });
           return;
         }
       } catch (error) {
         console.error("Error verifying NFT access:", error);
+        // On error, still show mint prompt as a fallback
+        setShowMintPrompt(true);
+        setSelectedMedia(media);
         toast({
           title: "Verification Error",
-          description: "Failed to verify your access. Please try again.",
-          variant: "destructive",
+          description: "Failed to verify your access. You can mint an access pass to view this media.",
+          variant: "default",
         });
         return;
       }
     }
 
+    // User has access (either no NFT required, is owner, or has NFT)
     setSelectedMedia(media);
   };
 
@@ -521,135 +542,13 @@ const GalleryDetail = () => {
     }
   };
 
-  // Gallery is accessible if: public, or user is owner, or user has NFT access
-  const isGalleryAccessible = !gallery.isLocked || isOwner || hasAccess === true;
+  // Galleries are always accessible for viewing (public by default)
+  // NFT is only required for viewing media, not for viewing the gallery itself
+  const isGalleryAccessible = true; // Always allow viewing gallery details
 
-  // Show loading state while checking access
-  if (checkingAccess) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Header onUploadClick={() => navigate("/create")} />
-        <main className="container mx-auto px-4 py-8">
-          <Button onClick={() => navigate("/")} variant="ghost" className="mb-4">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Galleries
-          </Button>
-          <div className="flex items-center justify-center min-h-[60vh]">
-            <div className="text-center">
-              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
-              <p className="text-muted-foreground">Verifying access...</p>
-            </div>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  // Show mint prompt if user doesn't have access
-  if (gallery.isLocked && !isOwner && hasAccess === false && showMintPrompt) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Header onUploadClick={() => navigate("/create")} />
-        <main className="container mx-auto px-4 py-8 max-w-2xl">
-          <Button onClick={() => navigate("/")} variant="ghost" className="mb-4">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Galleries
-          </Button>
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold mb-2">{gallery.title}</h1>
-            <p className="text-muted-foreground">{gallery.description}</p>
-          </div>
-          <MintNFTPrompt
-            galleryTitle={gallery.title}
-            requiredNFT={gallery.requiredNFT}
-            onMintSuccess={async () => {
-              // Re-check access after minting
-              try {
-                const hasNFT = await verifyNFT(
-                  gallery.requiredNFT || GALLERY_NFT_PACKAGEID,
-                  gallery.requiredTraits
-                );
-                setHasAccess(hasNFT);
-                setShowMintPrompt(!hasNFT);
-                if (hasNFT) {
-                  toast({
-                    title: "Access Granted!",
-                    description: "Your NFT has been verified. You now have access to this gallery.",
-                  });
-                }
-              } catch (error) {
-                console.error("Error verifying access after mint:", error);
-              }
-            }}
-            onCancel={() => {
-              setShowMintPrompt(false);
-              navigate("/");
-            }}
-          />
-        </main>
-      </div>
-    );
-  }
-
-  // Show locked message if wallet not connected
-  if (gallery.isLocked && !isWalletConnected && !isOwner) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Header onUploadClick={() => navigate("/create")} />
-        <main className="container mx-auto px-4 py-8">
-          <Button onClick={() => navigate("/")} variant="ghost" className="mb-4">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Galleries
-          </Button>
-          <div className="flex items-center justify-center min-h-[60vh]">
-            <div className="text-center glass-card p-8 rounded-lg border border-locked/20">
-              <Lock className="h-16 w-16 mx-auto mb-4 text-locked" />
-              <h2 className="text-2xl font-bold mb-2">Gallery Locked</h2>
-              <p className="text-muted-foreground mb-4">
-                This gallery requires an NFT to access. Please connect your wallet to continue.
-              </p>
-              <Button onClick={() => navigate("/")} variant="gradient">
-                Back to Galleries
-              </Button>
-            </div>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  // Show access denied if locked and no access
-  if (gallery.isLocked && !isOwner && hasAccess === false && !showMintPrompt) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Header onUploadClick={() => navigate("/create")} />
-        <main className="container mx-auto px-4 py-8">
-          <Button onClick={() => navigate("/")} variant="ghost" className="mb-4">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Galleries
-          </Button>
-          <div className="flex items-center justify-center min-h-[60vh]">
-            <div className="text-center glass-card p-8 rounded-lg border border-locked/20 max-w-md">
-              <Lock className="h-16 w-16 mx-auto mb-4 text-locked" />
-              <h2 className="text-2xl font-bold mb-2">Access Denied</h2>
-              <p className="text-muted-foreground mb-4">
-                You don't have the required NFT to access this gallery.
-              </p>
-              <Button
-                onClick={() => setShowMintPrompt(true)}
-                variant="gradient"
-                className="mb-2"
-              >
-                Mint Access Pass NFT
-              </Button>
-              <Button onClick={() => navigate("/")} variant="outline" className="w-full">
-                Back to Galleries
-              </Button>
-            </div>
-          </div>
-        </main>
-      </div>
-    );
+  // Show loading state while checking access (only briefly)
+  if (checkingAccess && gallery.isLocked) {
+    // Don't block - just show a brief loading indicator
   }
 
   return (
@@ -683,38 +582,71 @@ const GalleryDetail = () => {
               )}
             </div>
 
-            {galleryMedia.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                {galleryMedia.map((media, index) => (
-                  <div key={media.id} className="group relative">
-                    <MediaCard
-                      title={media.title}
-                      type={media.type}
-                      thumbnail={media.thumbnail}
-                      isLocked={media.isLocked}
-                      requiredNFT={media.requiredNFT}
-                      onClick={() => handleMediaClick(media)}
-                    />
-                    {isOwner && (
+            {/* Show NFT requirement notice if gallery is locked */}
+            {(gallery.isLocked || gallery.requiredNFT) && !isOwner && (
+              <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <Lock className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                      NFT Required to View Media
+                    </p>
+                    <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                      This gallery is public, but viewing media requires an NFT. {!isWalletConnected && "Connect your wallet to check access or mint an access pass."}
+                    </p>
+                    {isWalletConnected && hasAccess === false && (
                       <Button
-                        variant="destructive"
+                        onClick={() => setShowMintPrompt(true)}
+                        variant="outline"
                         size="sm"
-                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteMedia(index);
-                        }}
-                        disabled={isDeleting === index}
+                        className="mt-2"
                       >
-                        {isDeleting === index ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-4 h-4" />
-                        )}
+                        <Plus className="mr-2 h-3 w-3" />
+                        Mint Access Pass
                       </Button>
                     )}
                   </div>
-                ))}
+                </div>
+              </div>
+            )}
+
+            {galleryMedia.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                {galleryMedia.map((media, index) => {
+                  // Media is locked if gallery requires NFT and user doesn't have access
+                  const mediaIsLocked = (gallery.isLocked || gallery.requiredNFT) && !isOwner && hasAccess !== true;
+
+                  return (
+                    <div key={media.id} className="group relative">
+                      <MediaCard
+                        title={media.title}
+                        type={media.type}
+                        thumbnail={media.thumbnail}
+                        isLocked={mediaIsLocked}
+                        requiredNFT={gallery.requiredNFT}
+                        onClick={() => handleMediaClick(media)}
+                      />
+                      {isOwner && (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteMedia(index);
+                          }}
+                          disabled={isDeleting === index}
+                        >
+                          {isDeleting === index ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div className="text-center py-12">
@@ -791,8 +723,61 @@ const GalleryDetail = () => {
         open={!!selectedMedia}
         onOpenChange={(open) => !open && setSelectedMedia(null)}
         media={selectedMedia}
-        isAccessible={selectedMedia ? isMediaAccessible(selectedMedia) : false}
+        isAccessible={selectedMedia ? (isOwner || !gallery.isLocked || hasAccess === true) : false}
       />
+
+      {/* Mint Prompt Modal - shown when user tries to access locked media without NFT */}
+      {showMintPrompt && gallery && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-background rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-bold">Mint Access Pass</h2>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowMintPrompt(false)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <MintNFTPrompt
+                galleryTitle={gallery.title}
+                requiredNFT={gallery.requiredNFT}
+                onMintSuccess={async () => {
+                  // Re-check access after minting
+                  try {
+                    const hasNFT = await verifyNFT(
+                      gallery.requiredNFT || GALLERY_NFT_PACKAGEID,
+                      gallery.requiredTraits
+                    );
+                    setHasAccess(hasNFT);
+                    setShowMintPrompt(false);
+                    if (hasNFT) {
+                      toast({
+                        title: "Access Granted!",
+                        description: "Your NFT has been verified. You can now view the media.",
+                      });
+                      // Retry opening the media
+                      if (selectedMedia) {
+                        setSelectedMedia(null);
+                        setTimeout(() => {
+                          handleMediaClick(selectedMedia);
+                        }, 500);
+                      }
+                    }
+                  } catch (error) {
+                    console.error("Error verifying access after mint:", error);
+                  }
+                }}
+                onCancel={() => {
+                  setShowMintPrompt(false);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -368,6 +368,8 @@ function CreateGallery() {
                 const txb = new Transaction();
 
                 // Step 1: Create gallery on-chain
+                // Galleries are always public - is_locked indicates NFT required for media viewing
+                const requiresNFT = visibility === "private" || mintNFTForGallery;
                 txb.moveCall({
                     target: `${GALLERY_NFT_PACKAGEID}::gallery_nft::create_gallery`,
                     arguments: [
@@ -376,9 +378,9 @@ function CreateGallery() {
                         txb.pure.string(galleryDescription || description),
                         txb.pure.string(mediaUris[0]?.uri || ""),
                         txb.pure.u64(mediaUris.length),
-                        txb.pure.bool(visibility === "private"),
-                        txb.pure.string(""), // required_nft (empty for now)
-                        txb.pure.string(visibility),
+                        txb.pure.bool(requiresNFT), // is_locked: true if NFT required for media
+                        txb.pure.string(""), // required_nft (will be set if NFT is minted)
+                        txb.pure.string("public"), // visibility: always public - galleries are visible to everyone
                         txb.pure.string(galleryUri),
                     ],
                 });

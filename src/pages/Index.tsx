@@ -19,35 +19,8 @@ const Index = () => {
   const { toast } = useToast();
 
   const handleGalleryClick = async (gallery: any) => {
-    // Check if user is the gallery owner - they always have access
-    const isOwner = connection?.address?.toLowerCase() === gallery.owner?.toLowerCase();
-
-    if (!gallery.isLocked || isOwner) {
-      navigate(`/gallery/${gallery.id}`);
-      return;
-    }
-
-    if (!isConnected) {
-      toast({
-        title: "Connect Wallet",
-        description: "Please connect your wallet to access this gallery",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Since we only support Sui now, all galleries are Sui-based
-    if (connection?.chain !== 'sui' && gallery.chain === 'sui') {
-      toast({
-        title: "Connect Sui Wallet",
-        description: "Please connect your Sui wallet to access this gallery",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Navigate to gallery - verification will happen on the detail page
-    // This allows the user to see the gallery and get better error messages
+    // All galleries are public and viewable by everyone
+    // NFT is only required for viewing media, not for viewing the gallery itself
     navigate(`/gallery/${gallery.id}`);
   };
 
