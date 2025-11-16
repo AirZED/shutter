@@ -284,9 +284,88 @@ export const useWalrusUpload = () => {
         }
     };
 
+    // Delete media from existing gallery
+    const deleteMediaFromGallery = async (
+        galleryUri: string,
+        mediaIndexToDelete: number
+    ): Promise<{
+        galleryUri: string;
+        transactionHash: string;
+    }> => {
+        try {
+            // Step 1: Fetch existing gallery metadata
+            const blobId = galleryUri.replace(`${AGGREGATOR}/v1/blobs/`, '').replace('https://blob.walrus.testnet.space/', '');
+            const galleryResponse = await axios.get(`${AGGREGATOR}/v1/blobs/${blobId}`);
+            const existingGallery = galleryResponse.data;
+
+            // Step 2: Remove the media at the specified index
+            const updatedMediaUris = [...(existingGallery.mediaUris || [])];
+            if (mediaIndexToDelete >= 0 && mediaIndexToDelete < updatedMediaUris.length) {
+                updatedMediaUris.splice(mediaIndexToDelete, 1);
+            } else {
+                throw new Error(`Invalid media index: ${mediaIndexToDelete}`);
+            }
+
+            // Step 3: Update gallery metadata
+            const updatedGalleryMetadata = {
+                ...existingGallery,
+                mediaUris: updatedMediaUris,
+                mediaCount: updatedMediaUris.length,
+                updatedAt: new Date().toISOString(),
+            };
+
+            // Step 4: Upload updated gallery metadata to Walrus
+            const updatedGalleryBlob = new Blob([JSON.stringify(updatedGalleryMetadata, null, 2)], {
+                type: 'application/json',
+            });
+            const updatedGalleryFile = new File([updatedGalleryBlob], `${existingGallery.galleryId}-metadata.json`, {
+                type: 'application/json',
+            });
+
+            const updatedGalleryResponse = await axios.put(
+                `${PUBLISHER}/v1/blobs?epochs=5&deletable=true`,
+                updatedGalleryFile,
+                {
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                }
+            );
+
+            const updatedGalleryResult = updatedGalleryResponse.data;
+            let updatedGalleryBlobId: string;
+            if (updatedGalleryResult.newlyCreated) {
+                const blob = updatedGalleryResult.newlyCreated.blobObject;
+                updatedGalleryBlobId = blob.blobId;
+            } else if (updatedGalleryResult.alreadyCertified) {
+                updatedGalleryBlobId = updatedGalleryResult.alreadyCertified.blobId;
+            } else {
+                throw new Error('Unexpected updated gallery upload response format');
+            }
+
+            const updatedGalleryUri = `${AGGREGATOR}/v1/blobs/${updatedGalleryBlobId}`;
+
+            console.log('Media deleted from gallery:', {
+                galleryId: existingGallery.galleryId,
+                deletedIndex: mediaIndexToDelete,
+                newMediaCount: updatedMediaUris.length,
+                updatedGalleryUri,
+            });
+
+            return {
+                galleryUri: updatedGalleryUri,
+                transactionHash: `walrus-${updatedGalleryBlobId.slice(0, 16)}`,
+            };
+        } catch (error) {
+            console.error('Error deleting media from gallery:', error);
+            throw new Error(`Failed to delete media: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    };
+
     return {
         uploadMediaToWalrus,
         uploadGalleryToWalrus,
         updateGalleryInWalrus,
+        deleteMediaFromGallery,
     };
 };

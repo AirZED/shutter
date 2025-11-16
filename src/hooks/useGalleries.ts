@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
 import { walrusClient } from '@/lib/walrus';
+import { SuiClient, getFullnodeUrl } from '@mysten/sui/client';
+import { GALLERY_NFT_PACKAGEID } from '@/lib/constants';
+import axios from 'axios';
 
 export interface Gallery {
   id: string;
@@ -24,98 +27,125 @@ export interface Gallery {
   }>;
 }
 
-export const useGalleries = () => {
+export const useGalleries = (userAddress?: string | null) => {
   const [galleries, setGalleries] = useState<Gallery[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const suiClient = new SuiClient({
+    url: getFullnodeUrl('testnet'),
+  });
+
+  const AGGREGATOR = "https://aggregator.walrus-testnet.walrus.space";
+
+  // Fetch galleries from on-chain Gallery objects
+  const fetchGalleriesFromChain = async (address: string): Promise<Gallery[]> => {
+    try {
+      const onChainGalleries: Gallery[] = [];
+
+      // Query all owned objects for Gallery type
+      const packageId = GALLERY_NFT_PACKAGEID;
+      const galleryType = `${packageId}::gallery_nft::Gallery`;
+
+      let cursor: string | null = null;
+      let hasNextPage = true;
+
+      while (hasNextPage) {
+        const ownedObjects = await suiClient.getOwnedObjects({
+          owner: address,
+          filter: {
+            StructType: galleryType,
+          },
+          options: {
+            showContent: true,
+            showType: true,
+          },
+          cursor: cursor || undefined,
+          limit: 50,
+        });
+
+        // Process each Gallery object
+        for (const obj of ownedObjects.data) {
+          if (obj.data?.content && 'fields' in obj.data.content) {
+            const fields = obj.data.content.fields as any;
+
+            // Fetch full gallery metadata from Walrus if gallery_uri exists
+            let fullGalleryData: any = null;
+            if (fields.gallery_uri) {
+              try {
+                const galleryResponse = await axios.get(fields.gallery_uri);
+                fullGalleryData = galleryResponse.data;
+              } catch (err) {
+                console.error('Error fetching gallery metadata from URI:', fields.gallery_uri, err);
+              }
+            }
+
+            onChainGalleries.push({
+              id: fields.gallery_id || obj.data.objectId,
+              title: fields.title || 'Untitled Gallery',
+              description: fields.description || '',
+              thumbnail: fields.thumbnail || '',
+              mediaCount: Number(fields.media_count) || 0,
+              isLocked: fields.is_locked || false,
+              participantCount: fullGalleryData?.participantCount || 0,
+              requiredNFT: fields.required_nft || fullGalleryData?.requiredNFT,
+              requiredTraits: fullGalleryData?.requiredTraits,
+              chain: 'sui',
+              owner: address,
+              visibility: fields.visibility || 'public',
+              createdAt: new Date(Number(fields.created_at) * 1000).toISOString(),
+              updatedAt: new Date(Number(fields.updated_at) * 1000).toISOString(),
+              galleryUri: fields.gallery_uri || '',
+              mediaUris: fullGalleryData?.mediaUris || [],
+            });
+          }
+        }
+
+        cursor = ownedObjects.nextCursor || null;
+        hasNextPage = ownedObjects.hasNextPage;
+      }
+
+      return onChainGalleries;
+    } catch (err) {
+      console.error('Error fetching galleries from chain:', err);
+      return [];
+    }
+  };
 
   const fetchGalleries = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // In a real implementation, you would:
-      // 1. Query a registry of gallery URIs
-      // 2. Or use Walrus tags to search for galleries
-      // 3. Or maintain an index of gallery metadata
+      const allGalleries: Gallery[] = [];
 
-      // For now, we'll use mock data but structure it to match the real format
-      const mockGalleries: Gallery[] = [
-        {
-          id: "1",
-          title: "Sunset Photography Collection",
-          description: "A curated collection of breathtaking sunset photographs from around the world",
-          thumbnail: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&h=400&fit=crop",
-          mediaCount: 12,
-          isLocked: false,
-          participantCount: 24,
-          owner: "0x123...",
-          visibility: 'public',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          galleryUri: "https://blob.walrus.testnet.space/mock-gallery-1",
-          mediaUris: [],
-        },
-        {
-          id: "2",
-          title: "Exclusive Sui NFT Gallery",
-          description: "Premium digital art collection accessible only to verified Sui NFT holders",
-          thumbnail: "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=400&h=400&fit=crop",
-          mediaCount: 8,
-          isLocked: true,
-          requiredNFT: "0x1234567890abcdef1234567890abcdef12345678",
-          chain: 'sui',
-          participantCount: 15,
-          owner: "0x456...",
-          visibility: 'private',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          galleryUri: "https://blob.walrus.testnet.space/mock-gallery-2",
-          mediaUris: [],
-        },
-        {
-          id: "3",
-          title: "Product Showcase & Demos",
-          description: "Professional product photography and demonstration videos",
-          thumbnail: "https://images.unsplash.com/photo-1492619375914-88005aa9e8fb?w=400&h=400&fit=crop",
-          mediaCount: 18,
-          isLocked: false,
-          participantCount: 42,
-          owner: "0x789...",
-          visibility: 'public',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          galleryUri: "https://blob.walrus.testnet.space/mock-gallery-3",
-          mediaUris: [],
-        },
-        {
-          id: "4",
-          title: "VIP Sui NFT Members",
-          description: "Exclusive content for Sui NFT holders with specific traits",
-          thumbnail: "https://images.unsplash.com/photo-1485579149621-3123dd979885?w=400&h=400&fit=crop",
-          mediaCount: 25,
-          isLocked: true,
-          requiredNFT: "0xabcdef1234567890abcdef1234567890abcdef12",
-          requiredTraits: {
-            "Rarity": "Legendary",
-            "Level": "10"
+      // Fetch galleries from on-chain Gallery objects only (no localStorage)
+      if (userAddress) {
+        const chainGalleries = await fetchGalleriesFromChain(userAddress);
+        allGalleries.push(...chainGalleries);
+      }
+
+      // Add mock galleries for demo (only if no user galleries found)
+      if (allGalleries.length === 0) {
+        const mockGalleries: Gallery[] = [
+          {
+            id: "1",
+            title: "Sunset Photography Collection",
+            description: "A curated collection of breathtaking sunset photographs from around the world",
+            thumbnail: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&h=400&fit=crop",
+            mediaCount: 12,
+            isLocked: false,
+            participantCount: 24,
+            owner: "0x123...",
+            visibility: 'public',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            galleryUri: "https://blob.walrus.testnet.space/mock-gallery-1",
+            mediaUris: [],
           },
-          chain: 'sui',
-          participantCount: 8,
-          owner: "0xabc...",
-          visibility: 'private',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          galleryUri: "https://blob.walrus.testnet.space/mock-gallery-4",
-          mediaUris: [],
-        },
-      ];
-
-      // Also load user galleries from localStorage
-      const userGalleries = JSON.parse(localStorage.getItem('userGalleries') || '[]');
-
-      // Combine mock galleries with user galleries
-      const allGalleries = [...mockGalleries, ...userGalleries];
+        ];
+        allGalleries.push(...mockGalleries);
+      }
 
       setGalleries(allGalleries);
     } catch (err) {
@@ -163,7 +193,7 @@ export const useGalleries = () => {
 
   useEffect(() => {
     fetchGalleries();
-  }, []);
+  }, [userAddress]);
 
   return {
     galleries,

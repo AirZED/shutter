@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 const Index = () => {
   const navigate = useNavigate();
   const { connection, verifyNFT } = useWallet();
-  const { galleries, loading, error, fetchGalleries } = useGalleries();
+  const { galleries, loading, error, fetchGalleries } = useGalleries(connection?.address);
   const isConnected = connection?.isConnected || false;
 
   const { toast } = useToast();
