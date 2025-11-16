@@ -1,59 +1,47 @@
 import { useSignAndExecuteTransaction } from '@mysten/dapp-kit';
-import { walrusClient } from '@/lib/walrus';
-import { WalrusFile } from '@mysten/walrus';
+import axios from 'axios';
 import { MediaFile, GalleryMedia } from '@/lib/nft-minting';
+
+const PUBLISHER = "https://publisher.walrus-testnet.walrus.space";
+const AGGREGATOR = "https://aggregator.walrus-testnet.walrus.space";
 
 export const useWalrusUpload = () => {
     const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
 
-    // Upload single media to Walrus and get URI
+    // Upload single media to Walrus using HTTP API (like /mint page)
     const uploadMediaToWalrus = async (mediaFile: MediaFile): Promise<{
         imageUri: string;
         metadataUri: string;
     }> => {
         try {
-            // Step 1: Create and encode the flow
-            const mediaWalrusFile = walrusClient.writeFilesFlow({
-                files: [
-                    WalrusFile.from({
-                        contents: new Uint8Array(await mediaFile.file.arrayBuffer()),
-                        identifier: mediaFile.name,
-                    }),
-                ],
-            });
-            await mediaWalrusFile.encode();
+            // Upload to Walrus publisher using Axios (HTTP API - no WebAssembly needed)
+            const response = await axios.put(
+                `${PUBLISHER}/v1/blobs?epochs=5&deletable=true`,
+                mediaFile.file,
+                {
+                    headers: {
+                        "Content-Type": mediaFile.file.type || "image/jpeg",
+                    },
+                }
+            );
 
-            // Step 2: Register media blob (requires user sign - popup)
-            const mediaRegisterTx = mediaWalrusFile.register({
-                epochs: 3, // Adjust as needed for storage duration
-                owner: '', // Will be set by dapp-kit signer
-                deletable: true,
-            });
+            const result = response.data;
+            console.log("Upload result:", result);
 
-            const mediaRegisterResult = await signAndExecuteTransaction({
-                transaction: mediaRegisterTx,
-            });
-
-            // Step 3: Upload media to storage nodes
-            await mediaWalrusFile.upload({ digest: mediaRegisterResult.digest });
-
-            // Step 4: Certify media blob (requires user sign - popup)
-            const mediaCertifyTx = mediaWalrusFile.certify();
-            await signAndExecuteTransaction({
-                transaction: mediaCertifyTx,
-            });
-
-            // Step 5: Get media files and extract blob ID
-            const mediaFiles = await mediaWalrusFile.listFiles();
-            if (mediaFiles.length === 0) {
-                throw new Error('No files listed after certification');
+            let blobId: string;
+            if (result.newlyCreated) {
+                const blob = result.newlyCreated.blobObject;
+                blobId = blob.blobId;
+            } else if (result.alreadyCertified) {
+                blobId = result.alreadyCertified.blobId;
+            } else {
+                throw new Error('Unexpected upload response format');
             }
-            const mediaBlobId = mediaFiles[0].blobId;
-            const imageUri = `https://blob.walrus.testnet.space/${mediaBlobId}`;
 
-            console.log('Media upload complete:', { imageUri });
+            const imageUri = `${AGGREGATOR}/v1/blobs/${blobId}`;
+            console.log('Media upload complete:', { imageUri, blobId });
 
-            // Step 6: Create and upload metadata
+            // Create and upload metadata using HTTP API
             const metadata = {
                 name: mediaFile.name,
                 description: mediaFile.description,
@@ -92,40 +80,36 @@ export const useWalrusUpload = () => {
                 },
             };
 
-            const metadataFlow = walrusClient.writeFilesFlow({
-                files: [
-                    WalrusFile.from({
-                        contents: new Uint8Array(new TextEncoder().encode(JSON.stringify(metadata))),
-                        identifier: `${mediaFile.name}-metadata.json`,
-                    }),
-                ],
+            // Upload metadata as JSON blob
+            const metadataBlob = new Blob([JSON.stringify(metadata, null, 2)], {
+                type: 'application/json',
             });
-            await metadataFlow.encode();
-
-            const metadataRegisterTx = metadataFlow.register({
-                epochs: 3,
-                owner: '', // Set by signer
-                deletable: true,
+            const metadataFile = new File([metadataBlob], `${mediaFile.name}-metadata.json`, {
+                type: 'application/json',
             });
 
-            const metadataRegisterResult = await signAndExecuteTransaction({
-                transaction: metadataRegisterTx,
-            });
+            const metadataResponse = await axios.put(
+                `${PUBLISHER}/v1/blobs?epochs=5&deletable=true`,
+                metadataFile,
+                {
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                }
+            );
 
-            await metadataFlow.upload({ digest: metadataRegisterResult.digest });
-
-            const metadataCertifyTx = metadataFlow.certify();
-            await signAndExecuteTransaction({
-                transaction: metadataCertifyTx,
-            });
-
-            const metadataFiles = await metadataFlow.listFiles();
-            if (metadataFiles.length === 0) {
-                throw new Error('No metadata files listed after certification');
+            const metadataResult = metadataResponse.data;
+            let metadataBlobId: string;
+            if (metadataResult.newlyCreated) {
+                const blob = metadataResult.newlyCreated.blobObject;
+                metadataBlobId = blob.blobId;
+            } else if (metadataResult.alreadyCertified) {
+                metadataBlobId = metadataResult.alreadyCertified.blobId;
+            } else {
+                throw new Error('Unexpected metadata upload response format');
             }
-            const metadataBlobId = metadataFiles[0].blobId;
-            const metadataUri = `https://blob.walrus.testnet.space/${metadataBlobId}`;
 
+            const metadataUri = `${AGGREGATOR}/v1/blobs/${metadataBlobId}`;
             console.log('Metadata upload complete:', { metadataUri });
 
             return {
@@ -138,7 +122,7 @@ export const useWalrusUpload = () => {
         }
     };
 
-    // Upload gallery metadata to Walrus
+    // Upload gallery metadata to Walrus using HTTP API
     const uploadGalleryToWalrus = async (
         galleryId: string,
         title: string,
@@ -146,7 +130,7 @@ export const useWalrusUpload = () => {
         mediaUris: GalleryMedia[],
         owner: string,
         visibility: 'public' | 'private',
-        chain: 'solana' | 'sui',
+        chain: 'sui',
         accessControl: {
             type: 'public' | 'nft_required' | 'trait_required';
             requiredNFT?: string;
@@ -173,51 +157,36 @@ export const useWalrusUpload = () => {
                 isLocked: visibility === 'private',
             };
 
-            // Upload gallery metadata to Walrus
-            const galleryFlow = walrusClient.writeFilesFlow({
-                files: [
-                    WalrusFile.from({
-                        contents: new Uint8Array(new TextEncoder().encode(JSON.stringify(galleryMetadata, null, 2))),
-                        identifier: `${galleryId}-metadata.json`,
-                        tags: {
-                            'content-type': 'application/json',
-                            'gallery-id': galleryId,
-                            'owner': owner,
-                            'chain': chain,
-                        },
-                    }),
-                ],
+            // Upload gallery metadata to Walrus using HTTP API
+            const galleryBlob = new Blob([JSON.stringify(galleryMetadata, null, 2)], {
+                type: 'application/json',
+            });
+            const galleryFile = new File([galleryBlob], `${galleryId}-metadata.json`, {
+                type: 'application/json',
             });
 
-            await galleryFlow.encode();
+            const galleryResponse = await axios.put(
+                `${PUBLISHER}/v1/blobs?epochs=5&deletable=true`,
+                galleryFile,
+                {
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                }
+            );
 
-            // Register gallery metadata blob
-            const galleryRegisterTx = galleryFlow.register({
-                epochs: 3,
-                owner: '', // Set by signer
-                deletable: true,
-            });
-
-            const galleryRegisterResult = await signAndExecuteTransaction({
-                transaction: galleryRegisterTx,
-            });
-
-            // Upload gallery metadata to storage nodes
-            await galleryFlow.upload({ digest: galleryRegisterResult.digest });
-
-            // Certify gallery metadata blob
-            const galleryCertifyTx = galleryFlow.certify();
-            await signAndExecuteTransaction({
-                transaction: galleryCertifyTx,
-            });
-
-            // Get gallery metadata URI
-            const galleryFiles = await galleryFlow.listFiles();
-            if (galleryFiles.length === 0) {
-                throw new Error('No gallery files listed after certification');
+            const galleryResult = galleryResponse.data;
+            let galleryBlobId: string;
+            if (galleryResult.newlyCreated) {
+                const blob = galleryResult.newlyCreated.blobObject;
+                galleryBlobId = blob.blobId;
+            } else if (galleryResult.alreadyCertified) {
+                galleryBlobId = galleryResult.alreadyCertified.blobId;
+            } else {
+                throw new Error('Unexpected gallery upload response format');
             }
-            const galleryBlobId = galleryFiles[0].blobId;
-            const galleryUri = `https://blob.walrus.testnet.space/${galleryBlobId}`;
+
+            const galleryUri = `${AGGREGATOR}/v1/blobs/${galleryBlobId}`;
 
             console.log('Gallery created and stored in Walrus:', {
                 galleryId,
@@ -227,9 +196,11 @@ export const useWalrusUpload = () => {
                 galleryUri,
             });
 
+            // Return a mock transaction hash since HTTP API doesn't return one
+            // In a real implementation, you might want to track this differently
             return {
                 galleryUri,
-                transactionHash: galleryRegisterResult.digest,
+                transactionHash: `walrus-${galleryBlobId.slice(0, 16)}`,
             };
         } catch (error) {
             console.error('Error creating gallery in Walrus:', error);
@@ -237,8 +208,85 @@ export const useWalrusUpload = () => {
         }
     };
 
+    // Update existing gallery with new media
+    const updateGalleryInWalrus = async (
+        galleryUri: string,
+        newMediaUris: GalleryMedia[]
+    ): Promise<{
+        galleryUri: string;
+        transactionHash: string;
+    }> => {
+        try {
+            // Step 1: Fetch existing gallery metadata using HTTP API
+            const blobId = galleryUri.replace(`${AGGREGATOR}/v1/blobs/`, '').replace('https://blob.walrus.testnet.space/', '');
+            const galleryResponse = await axios.get(`${AGGREGATOR}/v1/blobs/${blobId}`);
+            const existingGallery = galleryResponse.data;
+
+            // Step 2: Merge new media with existing media
+            const updatedMediaUris = [
+                ...(existingGallery.mediaUris || []),
+                ...newMediaUris,
+            ];
+
+            // Step 3: Update gallery metadata
+            const updatedGalleryMetadata = {
+                ...existingGallery,
+                mediaUris: updatedMediaUris,
+                mediaCount: updatedMediaUris.length,
+                updatedAt: new Date().toISOString(),
+            };
+
+            // Step 4: Upload updated gallery metadata to Walrus using HTTP API
+            const updatedGalleryBlob = new Blob([JSON.stringify(updatedGalleryMetadata, null, 2)], {
+                type: 'application/json',
+            });
+            const updatedGalleryFile = new File([updatedGalleryBlob], `${existingGallery.galleryId}-metadata.json`, {
+                type: 'application/json',
+            });
+
+            const updatedGalleryResponse = await axios.put(
+                `${PUBLISHER}/v1/blobs?epochs=5&deletable=true`,
+                updatedGalleryFile,
+                {
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                }
+            );
+
+            const updatedGalleryResult = updatedGalleryResponse.data;
+            let updatedGalleryBlobId: string;
+            if (updatedGalleryResult.newlyCreated) {
+                const blob = updatedGalleryResult.newlyCreated.blobObject;
+                updatedGalleryBlobId = blob.blobId;
+            } else if (updatedGalleryResult.alreadyCertified) {
+                updatedGalleryBlobId = updatedGalleryResult.alreadyCertified.blobId;
+            } else {
+                throw new Error('Unexpected updated gallery upload response format');
+            }
+
+            const updatedGalleryUri = `${AGGREGATOR}/v1/blobs/${updatedGalleryBlobId}`;
+
+            console.log('Gallery updated in Walrus:', {
+                galleryId: existingGallery.galleryId,
+                newMediaCount: newMediaUris.length,
+                totalMediaCount: updatedMediaUris.length,
+                updatedGalleryUri,
+            });
+
+            return {
+                galleryUri: updatedGalleryUri,
+                transactionHash: `walrus-${updatedGalleryBlobId.slice(0, 16)}`,
+            };
+        } catch (error) {
+            console.error('Error updating gallery in Walrus:', error);
+            throw new Error(`Failed to update gallery: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    };
+
     return {
         uploadMediaToWalrus,
         uploadGalleryToWalrus,
+        updateGalleryInWalrus,
     };
 };

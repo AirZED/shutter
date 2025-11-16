@@ -15,7 +15,6 @@ export const Header = ({ onUploadClick }: HeaderProps) => {
     address,
     chain,
     disconnectWallet,
-    connectSolanaWallet,
     connectSuiWallet,
     isConnecting,
     error,
@@ -28,9 +27,7 @@ export const Header = ({ onUploadClick }: HeaderProps) => {
   };
 
   const getExplorerUrl = () => {
-    if (chain === "solana") {
-      return `https://explorer.solana.com/address/${address}`;
-    } else if (chain === "sui") {
+    if (chain === "sui") {
       return `https://suiscan.xyz/account/${address}`;
     }
     return "#";
@@ -108,12 +105,8 @@ export const Header = ({ onUploadClick }: HeaderProps) => {
       <WalletConnect
         open={isWalletModalOpen}
         onOpenChange={setIsWalletModalOpen}
-        onConnect={async (chain: "solana" | "sui") => {
-          if (chain === "solana") {
-            await connectSolanaWallet();
-          } else {
-            await connectSuiWallet();
-          }
+        onConnect={async () => {
+          await connectSuiWallet();
           setIsWalletModalOpen(false);
         }}
         onDisconnect={handleDisconnect}

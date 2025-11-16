@@ -154,13 +154,39 @@ public fun has_access_tier(nft: &GalleryNFT, tier: String): bool {
     nft.access_tier == tier
 }
 
-// Updated init_display to use image_url
+/// Initialize Display metadata for GalleryNFT
+/// This must be called once by the package publisher after deployment
+/// Wallets use Display metadata to show NFTs in their UI
+/// 
+/// To call this function, you need the Publisher object from package deployment:
+/// sui client call --package <PACKAGE_ID> --module gallery_nft --function init_display --args <PUBLISHER_OBJECT_ID> --gas-budget 10000000
 public fun init_display(publisher: &package::Publisher, ctx: &mut TxContext) {
-    let mut display = display::new<GalleryNFT>(publisher, ctx);
+    let mut display = display::new<GalleryNFT>(
+        publisher,
+        ctx,
+    );
+    
+    // Standard Display fields that wallets recognize (required for NFT visibility)
     display::add(&mut display, string::utf8(b"name"), string::utf8(b"{name}"));
     display::add(&mut display, string::utf8(b"description"), string::utf8(b"{description}"));
-    display::add(&mut display, string::utf8(b"image_url"), string::utf8(b"{url}")); // Uses the full URL
+    
+    // Image fields - wallets look for both "image" and "image_url"
+    // "image" is the primary field most wallets check first
+    display::add(&mut display, string::utf8(b"image"), string::utf8(b"{url}"));
+    display::add(&mut display, string::utf8(b"image_url"), string::utf8(b"{url}"));
+    
+    // Additional metadata fields for better wallet display
     display::add(&mut display, string::utf8(b"creator"), string::utf8(b"{creator}"));
+    display::add(&mut display, string::utf8(b"access_tier"), string::utf8(b"{access_tier}"));
+    display::add(&mut display, string::utf8(b"walrus_blob_id"), string::utf8(b"{walrus_blob_id}"));
+    
+    // Link fields - some wallets use these for navigation
+    display::add(&mut display, string::utf8(b"link"), string::utf8(b"https://testnet.suivision.xyz/object/{id}"));
+    display::add(&mut display, string::utf8(b"project_url"), string::utf8(b"https://testnet.suivision.xyz"));
+    
+    // Update version to finalize the Display metadata
     display::update_version(&mut display);
+    
+    // Transfer Display object to package publisher (they own it)
     transfer::public_transfer(display, ctx.sender());
 }

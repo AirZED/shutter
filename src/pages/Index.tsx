@@ -1,9 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { HeroSection } from "@/components/HeroSection";
 import { GalleryCard } from "@/components/GalleryCard";
-import { UploadModal } from "@/components/UploadModal";
 import { AIAssistant } from "@/components/AIAssistant";
 import { useToast } from "@/hooks/use-toast";
 import { useWallet } from "@/contexts/WalletContext";
@@ -13,7 +12,6 @@ import { Button } from "@/components/ui/button";
 
 const Index = () => {
   const navigate = useNavigate();
-  const [isUploadOpen, setIsUploadOpen] = useState(false);
   const { connection, verifyNFT } = useWallet();
   const { galleries, loading, error, fetchGalleries } = useGalleries();
   const isConnected = connection?.isConnected || false;
@@ -21,7 +19,10 @@ const Index = () => {
   const { toast } = useToast();
 
   const handleGalleryClick = async (gallery: any) => {
-    if (!gallery.isLocked) {
+    // Check if user is the gallery owner - they always have access
+    const isOwner = connection?.address?.toLowerCase() === gallery.owner?.toLowerCase();
+
+    if (!gallery.isLocked || isOwner) {
       navigate(`/gallery/${gallery.id}`);
       return;
     }
@@ -35,41 +36,31 @@ const Index = () => {
       return;
     }
 
-    if (connection?.chain !== gallery.chain) {
+    // Since we only support Sui now, all galleries are Sui-based
+    if (connection?.chain !== 'sui' && gallery.chain === 'sui') {
       toast({
-        title: "Wrong Chain",
-        description: `This gallery requires a ${gallery.chain} wallet. Please switch to ${gallery.chain}.`,
+        title: "Connect Sui Wallet",
+        description: "Please connect your Sui wallet to access this gallery",
         variant: "destructive",
       });
       return;
     }
 
-    try {
-      const hasAccess = await verifyNFT(gallery.requiredNFT, gallery.requiredTraits);
-      if (hasAccess) {
-        navigate(`/gallery/${gallery.id}`);
-      } else {
-        toast({
-          title: "Access Denied",
-          description: "You don't have the required NFT to access this gallery.",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error("Error verifying NFT access:", error);
-      toast({
-        title: "Verification Error",
-        description: "Failed to verify your access. Please try again.",
-        variant: "destructive",
-      });
-    }
+    // Navigate to gallery - verification will happen on the detail page
+    // This allows the user to see the gallery and get better error messages
+    navigate(`/gallery/${gallery.id}`);
   };
+
+  // Refresh galleries when component mounts or when navigating back
+  useEffect(() => {
+    fetchGalleries();
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
-      <Header onUploadClick={() => setIsUploadOpen(true)} />
+      <Header onUploadClick={() => navigate("/create")} />
       <main className="container mx-auto px-4 py-8">
-        <HeroSection onGetStarted={() => setIsUploadOpen(true)} />
+        <HeroSection onGetStarted={() => navigate("/create")} />
 
         <div className="mb-6 flex items-center justify-between">
           <div>
@@ -111,7 +102,7 @@ const Index = () => {
         ) : galleries.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-muted-foreground mb-4">No galleries found</p>
-            <Button onClick={() => setIsUploadOpen(true)} variant="gradient">
+            <Button onClick={() => navigate("/create")} variant="gradient">
               Create Your First Gallery
             </Button>
           </div>
@@ -137,7 +128,6 @@ const Index = () => {
         )}
       </main>
 
-      <UploadModal open={isUploadOpen} onOpenChange={setIsUploadOpen} />
       <AIAssistant />
     </div>
   );

@@ -104,9 +104,65 @@ Update your frontend code to use this Package ID:
 const GALLERY_NFT_PACKAGE_ID = "0xf5eaa3a7133f481c6505bf17a22ba8b3acf5e0c8c531b64c749b8e4fdd2df345";
 ```
 
+## Display Metadata Initialization
+
+**IMPORTANT:** To make NFTs appear in wallets, you must initialize Display metadata after deployment.
+
+### Step 1: Get the Publisher Object ID
+
+**Note:** The Publisher object is created when you publish a package, but it may not always appear in the transaction's `objectChanges` or `created` objects list. This is normal behavior in Sui.
+
+To find the Publisher Object ID, try these methods:
+
+**Method 1: Check the Deployer's Address Page (Most Reliable)**
+1. Go to the deployer's address page: https://suiscan.xyz/testnet/address/0x6829750cae6ed782ff951e2214a7c48ddd35b966757c832b2d5336c5f8f5b453
+2. Look for objects with type containing `Publisher`
+3. The Publisher object ID will be listed there
+
+**Method 2: Use the Helper Script**
+```bash
+./get_publisher_id.sh
+```
+This script will attempt to find the Publisher ID automatically.
+
+**Method 3: Use Sui CLI (if installed)**
+```bash
+sui client objects 0x6829750cae6ed782ff951e2214a7c48ddd35b966757c832b2d5336c5f8f5b453 | grep Publisher
+```
+
+**Method 4: Use the Web UI**
+Navigate to `/init-display` in your app - the UI will help you find and use the Publisher ID.
+
+### Step 2: Call init_display
+
+Once you have the Publisher Object ID:
+
+```bash
+./init_display.sh <PUBLISHER_OBJECT_ID>
+```
+
+Or using sui client directly:
+```bash
+sui client call \
+  --package 0xf5eaa3a7133f481c6505bf17a22ba8b3acf5e0c8c531b64c749b8e4fdd2df345 \
+  --module gallery_nft \
+  --function init_display \
+  --args "<PUBLISHER_OBJECT_ID>" \
+  --gas-budget 10000000
+```
+
+### What Display Metadata Does
+
+- Makes NFTs visible in wallet NFT lists
+- Provides metadata for wallet UI (name, description, image)
+- Enables proper NFT display in explorers and marketplaces
+
+**Note:** This only needs to be called ONCE per package. After initialization, all NFTs minted from this contract will automatically use the Display metadata.
+
 ## Notes
 
 - The contract supports Walrus-stored images and external URLs
 - Access tiers are flexible (e.g., "public", "premium", "exclusive")
 - All NFTs track creator address and creation timestamp
 - NFTs are transferable and can be burned by the owner
+- **Display metadata must be initialized for NFTs to appear in wallets**
