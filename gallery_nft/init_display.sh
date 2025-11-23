@@ -1,14 +1,15 @@
 #!/bin/bash
 
 # Script to initialize Display metadata for GalleryNFT
-# This must be run by the package publisher after deployment
+# NOTE: Display is now automatically initialized via init() function during deployment.
+# This script is kept for updating Display metadata after initial deployment.
 #
 # Usage:
 #   ./init_display.sh <PUBLISHER_OBJECT_ID>
 #   or
 #   PUBLISHER_ID=<PUBLISHER_OBJECT_ID> ./init_display.sh
 
-PACKAGE_ID="0xf5eaa3a7133f481c6505bf17a22ba8b3acf5e0c8c531b64c749b8e4fdd2df345"
+PACKAGE_ID="0x1d1af7043571e2892f95e3314e5fd8e6c848d90f49367665feae511737348edc"
 
 # Get publisher ID from command line argument or environment variable
 PUBLISHER_ID="${1:-${PUBLISHER_ID}}"
@@ -26,9 +27,12 @@ if [ -z "$PUBLISHER_ID" ]; then
   echo "    ./get_publisher_id.sh"
   echo ""
   echo "  Option 2: Manual lookup:"
-  echo "    1. Visit: https://suiscan.xyz/testnet/tx/eE4hcTZZ6n1o1RHNnDsCETR3q5Ar1XVrmoBrQ2bRMxk"
-  echo "    2. Look in the 'Created Objects' section"
-  echo "    3. Find the object with type containing 'Publisher'"
+  echo "    1. Check deployer's address page: https://suiscan.xyz/testnet/address/0x9db84ca4d1eb64eff6088d1538a084723432a85bccedfb61ef2447e1a1f7465d"
+  echo "    2. Look for objects with type containing 'Publisher'"
+  echo "    3. Or visit transaction: https://suiscan.xyz/testnet/tx/4wV6GYjjoYknTJgfz7BYegby5EydTr4QqS7Td7Nu9tbb"
+  echo ""
+  echo "  Publisher ID from latest deployment:"
+  echo "    0xd1b05a0fc0c1872d7c5a0ace2323de872d1c46afc15133b311287f9e9ea5752f"
   echo ""
   echo "Example:"
   echo "  ./init_display.sh 0x1234567890abcdef..."
