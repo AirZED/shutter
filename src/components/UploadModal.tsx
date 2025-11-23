@@ -39,9 +39,11 @@ import axios from "axios";
 interface UploadModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  defaultGalleryId?: string; // Pre-select this gallery when opening
+  onGalleryUpdated?: (galleryId: string, newGalleryUri: string) => void; // Callback when gallery is updated
 }
 
-export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
+export const UploadModal = ({ open, onOpenChange, defaultGalleryId, onGalleryUpdated }: UploadModalProps) => {
   const [dragActive, setDragActive] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [title, setTitle] = useState("");
@@ -96,13 +98,13 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
 
   const { connection } = useWalletContext();
   const { uploadMediaToWalrus, uploadGalleryToWalrus, updateGalleryInWalrus } = useWalrusUpload();
-  const { galleries, fetchGalleries } = useGalleries();
+  const isConnected = connection?.isConnected || false;
+  const address = connection?.address;
+  const { galleries, fetchGalleries } = useGalleries(address);
   const { mutateAsync: signAndExecuteTransaction } =
     useSignAndExecuteTransaction();
 
   console.log("connection", connection);
-  const isConnected = connection?.isConnected || false;
-  const address = connection?.address;
   const { toast } = useToast();
 
   // Filter galleries to only show ones owned by current user
@@ -138,6 +140,18 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
       fetchBalances();
     }
   }, [open, isConnected, account]);
+
+  // Auto-select default gallery when modal opens
+  useEffect(() => {
+    if (open && defaultGalleryId && userGalleries.length > 0) {
+      const defaultGallery = userGalleries.find(g => g.id === defaultGalleryId);
+      if (defaultGallery) {
+        setAddToExistingGallery(true);
+        setSelectedExistingGallery(defaultGalleryId);
+        setCreateGallery(false);
+      }
+    }
+  }, [open, defaultGalleryId, userGalleries]);
 
   const handleFileSelect = (files: FileList | null) => {
     if (files) {
@@ -350,10 +364,40 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
           updatedGalleryUri = newGalleryUri;
           galleryId = existingGallery.id;
 
+          // Update on-chain Gallery object
+          try {
+            const newMediaCount = (existingGallery.mediaUris?.length || 0) + mediaUris.length;
+            const txb = new Transaction();
+            txb.moveCall({
+              target: `${GALLERY_NFT_PACKAGEID}::gallery_nft::update_gallery`,
+              arguments: [
+                txb.object(existingGallery.id), // Gallery object
+                txb.pure.string(existingGallery.title),
+                txb.pure.string(existingGallery.description),
+                txb.pure.u64(newMediaCount),
+                txb.pure.string(newGalleryUri),
+              ],
+            });
+
+            await signAndExecuteTransaction({
+              transaction: txb,
+            });
+
+            console.log('✅ On-chain gallery updated successfully');
+          } catch (error) {
+            console.error('Error updating on-chain gallery:', error);
+            // Don't fail the whole operation if on-chain update fails
+          }
+
           toast({
             title: "Gallery Updated",
-            description: `Successfully added ${selectedFiles.length} media files to "${existingGallery.title}" (Tx: ${transactionHash})`,
+            description: `Successfully added ${selectedFiles.length} media files to "${existingGallery.title}"`,
           });
+
+          // Notify parent component of the update
+          if (onGalleryUpdated) {
+            onGalleryUpdated(existingGallery.id, newGalleryUri);
+          }
         }
       }
       // Create new gallery if selected
@@ -380,52 +424,138 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
 
         toast({
           title: "Gallery Created",
-          description: `New gallery "${galleryTitle}" created and stored in Walrus (Tx: ${transactionHash})`,
+          description: `New gallery "${galleryTitle}" created and stored in Walrus`,
         });
-      }
 
-      // Mint NFT for gallery access if selected and private (only for new galleries)
-      if (mintNFTForGallery && visibility === "private" && galleryId && !addToExistingGallery) {
+        // Create gallery on-chain (and mint NFT if needed) - ALL IN ONE TRANSACTION
+        setUploadStatus("Creating gallery on-chain (single signature required)...");
         try {
-          const nftName = collectionName || `${galleryTitle} Access`;
-          const nftDescription = collectionSymbol || `Access pass for gallery: ${galleryTitle}`;
+          const txb = new Transaction();
 
-          // Use the first media for Sui minting - need blob ID
-          const firstMedia = mediaUris[0];
-          if (!firstMedia || !firstMedia.blobId) {
-            throw new Error("No media available for minting");
+          // Step 1: Create gallery on-chain
+          txb.moveCall({
+            target: `${GALLERY_NFT_PACKAGEID}::gallery_nft::create_gallery`,
+            arguments: [
+              txb.pure.string(galleryId),
+              txb.pure.string(galleryTitle),
+              txb.pure.string(galleryDescription || description),
+              txb.pure.string(mediaUris[0]?.uri || ""),
+              txb.pure.u64(mediaUris.length),
+              txb.pure.bool(visibility === "private"),
+              txb.pure.string(accessControl !== "public" ? requiredNFT || "" : ""),
+              txb.pure.string(visibility),
+              txb.pure.string(galleryUri),
+            ],
+          });
+
+          // Step 2: Mint NFT if requested (in the same transaction)
+          if (mintNFTForGallery && visibility === "private") {
+            const nftName = collectionName || `${galleryTitle} Access`;
+            const nftDescription = collectionSymbol || `Access pass for gallery: ${galleryTitle}\n\nGallery URI: ${galleryUri}`;
+
+            const firstMedia = mediaUris[0];
+            if (firstMedia && firstMedia.blobId) {
+              const imageUrl = `${AGGREGATOR}/v1/blobs/${firstMedia.blobId}`;
+
+              // Add mint call to the same transaction
+              txb.moveCall({
+                target: `${GALLERY_NFT_PACKAGEID}::gallery_nft::mint`,
+                arguments: [
+                  txb.pure.string(nftName),
+                  txb.pure.string(nftDescription),
+                  txb.pure.string(firstMedia.blobId),
+                  txb.pure.string(imageUrl),
+                  txb.pure.string("exclusive"), // access_tier
+                ],
+              });
+            }
           }
 
-          setUploadStatus("Minting NFT...");
-          const mintResult = await mintSuiNFT(
-            firstMedia.blobId,
-            nftName,
-            nftDescription,
-            visibility === "private" ? "exclusive" : "public"
-          );
+          // Execute single transaction (one signature for everything)
+          const result = await signAndExecuteTransaction({
+            transaction: txb,
+          });
 
-          setUploadStatus(`✅ NFT minted successfully! Tx: ${mintResult.transactionHash}`);
+          console.log('✅ Gallery created on-chain (single transaction):', result.digest);
+
+          // Extract NFT object ID if minting was included
+          let nftObjectId: string | null = null;
+          if (mintNFTForGallery && visibility === "private") {
+            try {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+
+              const suiClient = new SuiClient({
+                url: getFullnodeUrl("testnet"),
+              });
+
+              const txDetails = await suiClient.getTransactionBlock({
+                digest: result.digest,
+                options: {
+                  showEffects: true,
+                  showObjectChanges: true,
+                },
+              });
+
+              // Check object changes for created NFT
+              if (txDetails.objectChanges) {
+                for (const change of txDetails.objectChanges) {
+                  if (change.type === 'created' && 'objectType' in change) {
+                    const objectType = change.objectType as string;
+                    if (objectType.includes('gallery_nft::GalleryNFT')) {
+                      nftObjectId = change.objectId;
+                      break;
+                    }
+                  }
+                }
+              }
+            } catch (error) {
+              console.error('Error fetching NFT object ID:', error);
+            }
+          }
+
+          // Show success message
+          const messages = [];
+          messages.push(`Gallery "${galleryTitle}" is now stored on-chain`);
+
+          if (mintNFTForGallery && visibility === "private") {
+            if (nftObjectId) {
+              messages.push(`NFT minted successfully!`);
+            } else {
+              messages.push(`NFT mint transaction completed`);
+            }
+          }
+
           toast({
-            title: "NFT Minted",
-            description: `Successfully minted access NFT for gallery "${galleryTitle}" on Sui`,
+            title: "Success!",
+            description: messages.join(" "),
             action: (
-              <a
-                href={`https://testnet.suivision.xyz/txblock/${mintResult.transactionHash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline"
-              >
-                View Transaction
-              </a>
+              <div className="flex flex-col gap-2">
+                <a
+                  href={`https://testnet.suivision.xyz/txblock/${result.digest}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline text-sm"
+                >
+                  View Transaction
+                </a>
+                {nftObjectId && (
+                  <a
+                    href={`https://testnet.suivision.xyz/object/${nftObjectId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline text-sm"
+                  >
+                    View NFT
+                  </a>
+                )}
+              </div>
             ),
           });
         } catch (error) {
-          console.error("Error minting NFT:", error);
-          setUploadStatus(`❌ NFT minting failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+          console.error('Error creating gallery/NFT on-chain:', error);
           toast({
-            title: "NFT Minting Failed",
-            description: `Failed to mint NFT: ${error instanceof Error ? error.message : "Unknown error"
-              }`,
+            title: "Warning",
+            description: `Gallery created in Walrus but on-chain creation failed: ${error instanceof Error ? error.message : "Unknown error"}`,
             variant: "destructive",
           });
         }

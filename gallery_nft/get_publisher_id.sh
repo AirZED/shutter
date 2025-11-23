@@ -3,7 +3,7 @@
 # Script to fetch Publisher Object ID from deployment transaction
 # This helps you find the Publisher ID needed for init_display.sh
 
-DEPLOYMENT_TX="eE4hcTZZ6n1o1RHNnDsCETR3q5Ar1XVrmoBrQ2bRMxk"
+DEPLOYMENT_TX="4wV6GYjjoYknTJgfz7BYegby5EydTr4QqS7Td7Nu9tbb"
 
 echo "🔍 Fetching Publisher Object ID from deployment transaction..."
 echo "Transaction: $DEPLOYMENT_TX"
@@ -161,12 +161,17 @@ if [ -z "$PUBLISHER_ID" ] || [ "$PUBLISHER_ID" == "null" ] || [ "$PUBLISHER_ID" 
   echo "  4. Find the object with type containing 'Publisher'"
   echo "     (The Publisher object is owned by the transaction sender)"
   echo ""
+  echo "     Note: Publisher may not appear in Created Objects. If not found, use Method 2."
+  echo ""
   
   if [ -n "$DEPLOYER" ] && [ "$DEPLOYER" != "null" ] && [ "$DEPLOYER" != "" ]; then
-    echo "Method 2: Check Deployer's Objects (Transaction Sender)"
+    echo "Method 2: Check Deployer's Objects (Transaction Sender) - MOST RELIABLE"
     echo "  Deployer address (sender): $DEPLOYER"
     echo "  Visit: https://suiscan.xyz/testnet/address/$DEPLOYER"
     echo "  Look for objects with type containing 'Publisher'"
+    echo ""
+    echo "  Or use Sui CLI:"
+    echo "    sui client objects $DEPLOYER | grep Publisher"
     echo ""
   fi
   
@@ -181,7 +186,13 @@ fi
 echo "✅ Found Publisher Object ID:"
 echo "   $PUBLISHER_ID"
 echo ""
-echo "You can now run:"
+echo "Known Publisher ID from latest deployment (4wV6GYjjoYknTJgfz7BYegby5EydTr4QqS7Td7Nu9tbb):"
+echo "   0xd1b05a0fc0c1872d7c5a0ace2323de872d1c46afc15133b311287f9e9ea5752f"
+echo ""
+echo "Note: Display is now automatically initialized via init() function."
+echo "You only need this Publisher ID if you want to update Display metadata later."
+echo ""
+echo "To update Display metadata, run:"
 echo "   ./init_display.sh $PUBLISHER_ID"
 echo ""
 echo "Or copy the ID above and use it in the web UI at /init-display"
