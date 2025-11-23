@@ -768,7 +768,7 @@ function CreateGallery() {
 
                     <div className="space-y-6">
                         <div>
-                            <Label htmlFor="galleryTitle" className="text-base font-semibold">
+                            <Label htmlFor="galleryTitle" className="text-base font-semibold text-gray-600">
                                 Gallery Title *
                             </Label>
                             <Input
@@ -776,12 +776,12 @@ function CreateGallery() {
                                 placeholder="e.g., My Photography Collection"
                                 value={galleryTitle}
                                 onChange={(e) => setGalleryTitle(e.target.value)}
-                                className="h-12 text-base mt-2"
+                                className="h-12 text-base mt-2 text-gray-600 bg-gray-100"
                             />
                         </div>
 
                         <div>
-                            <Label htmlFor="galleryDescription" className="text-base font-semibold">
+                            <Label htmlFor="galleryDescription" className="text-base font-semibold text-gray-600">
                                 Gallery Description
                             </Label>
                             <Textarea
@@ -789,12 +789,12 @@ function CreateGallery() {
                                 placeholder="Describe your gallery theme, inspiration, and content..."
                                 value={galleryDescription}
                                 onChange={(e) => setGalleryDescription(e.target.value)}
-                                className="min-h-[120px] resize-none text-base mt-2"
+                                className="min-h-[120px] resize-none text-base mt-2 text-gray-600 bg-gray-100"
                             />
                         </div>
 
                         <div>
-                            <Label className="text-base font-semibold flex items-center gap-2">
+                            <Label className="text-base font-semibold flex items-center gap-2 text-gray-600">
                                 <Globe className="w-4 h-4" />
                                 Visibility
                             </Label>
@@ -802,10 +802,10 @@ function CreateGallery() {
                                 value={visibility}
                                 onValueChange={(value: "public" | "private") => setVisibility(value)}
                             >
-                                <SelectTrigger className="h-12 text-base mt-2">
+                                <SelectTrigger className="h-12 text-base mt-2 text-gray-600 bg-gray-100">
                                     <SelectValue />
                                 </SelectTrigger>
-                                <SelectContent>
+                                <SelectContent className="text-gray-600 bg-gray-100">
                                     <SelectItem value="public">
                                         <div className="flex items-center space-x-2">
                                             <Globe className="w-4 h-4 text-green-500" />
@@ -838,7 +838,7 @@ function CreateGallery() {
                             <div className="flex-1">
                                 <Label
                                     htmlFor="mintNFTForGallery"
-                                    className="text-lg font-semibold cursor-pointer flex items-center gap-2"
+                                    className="text-lg font-semibold cursor-pointer flex items-center gap-2 text-gray-600"
                                 >
                                     <Sparkles className="w-5 h-5 text-purple-500" />
                                     Mint Access NFT
@@ -860,7 +860,7 @@ function CreateGallery() {
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="space-y-2">
-                                        <Label htmlFor="collectionName" className="text-sm font-semibold">
+                                        <Label htmlFor="collectionName" className="text-sm font-semibold text-gray-600">
                                             NFT Name *
                                         </Label>
                                         <Input
@@ -868,11 +868,11 @@ function CreateGallery() {
                                             placeholder="e.g., Gallery Access Pass"
                                             value={collectionName}
                                             onChange={(e) => setCollectionName(e.target.value)}
-                                            className="h-12 text-base"
+                                            className="h-12 text-base text-gray-600 bg-gray-100"
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <Label htmlFor="nftDescription" className="text-sm font-semibold">
+                                        <Label htmlFor="nftDescription" className="text-sm font-semibold text-gray-600">
                                             Description *
                                         </Label>
                                         <Input
@@ -880,7 +880,7 @@ function CreateGallery() {
                                             placeholder="Describe your NFT..."
                                             value={collectionSymbol}
                                             onChange={(e) => setCollectionSymbol(e.target.value)}
-                                            className="h-12 text-base"
+                                            className="h-12 text-base text-gray-600 bg-gray-100"
                                         />
                                     </div>
                                 </div>
