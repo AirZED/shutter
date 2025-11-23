@@ -24,10 +24,11 @@ const Index = () => {
     navigate(`/gallery/${gallery.id}`);
   };
 
-  // Refresh galleries when component mounts or when navigating back
+  // Refresh galleries when component mounts, wallet connects, or address changes
   useEffect(() => {
     fetchGalleries();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connection?.isConnected, connection?.address]);
 
   return (
     <div className="min-h-screen bg-background">

@@ -282,3 +282,5 @@ For support and questions:
 ---
 
 Built with ❤️ using Walrus, Solana, and Sui
+
+**Last Updated:** January 2025

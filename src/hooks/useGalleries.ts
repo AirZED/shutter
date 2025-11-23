@@ -277,13 +277,16 @@ export const useGalleries = (userAddress?: string | null) => {
       setLoading(true);
       setError(null);
 
+      console.log('🔄 Fetching all galleries from chain...');
+
       // Fetch ALL galleries from on-chain (public - visible to everyone)
       // Galleries are always public, NFT is only required for viewing media
       const allGalleries = await fetchAllGalleriesFromChain();
 
+      console.log(`✅ Found ${allGalleries.length} galleries`);
       setGalleries(allGalleries);
     } catch (err) {
-      console.error('Error fetching galleries:', err);
+      console.error('❌ Error fetching galleries:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch galleries');
     } finally {
       setLoading(false);
@@ -326,7 +329,9 @@ export const useGalleries = (userAddress?: string | null) => {
   };
 
   useEffect(() => {
+    console.log('🔄 useGalleries: userAddress changed or component mounted, fetching galleries...', userAddress);
     fetchGalleries();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userAddress]);
 
   return {
