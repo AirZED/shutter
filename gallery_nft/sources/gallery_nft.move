@@ -51,7 +51,7 @@ public fun mint(
     let nft_id = object::uid_to_address(&nft_uid);
 
     // Validate inputs
-    assert!(walrus_blob_id.is_empty(), EInvalidBlobId);
+    assert!(!walrus_blob_id.is_empty(), EInvalidBlobId);
     assert!(!access_tier.is_empty(), EInvalidAccessTier);
 
     // Build standard URL for image display
