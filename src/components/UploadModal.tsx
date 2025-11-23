@@ -1,15 +1,32 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Upload, X, Plus, Trash2, Loader2 } from "lucide-react";
 import { useState, useRef } from "react";
 import { useWallet as useWalletContext } from "@/contexts/WalletContext";
-import { MediaFile, GalleryConfig, NFTCollectionConfig, mintGalleryNFT } from "@/lib/nft-minting";
+import {
+  MediaFile,
+  GalleryConfig,
+  NFTCollectionConfig,
+  mintGalleryNFT,
+} from "@/lib/nft-minting";
 import { useWalrusUpload } from "@/hooks/useWalrusUpload";
 import { useToast } from "@/hooks/use-toast";
 import { GALLERY_NFT_PACKAGEID } from "@/lib/constants";
@@ -35,17 +52,23 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
-  const [selectedChain, setSelectedChain] = useState<'solana' | 'sui'>('solana');
+  const [visibility, setVisibility] = useState<"public" | "private">("public");
+  const [selectedChain, setSelectedChain] = useState<"solana" | "sui">(
+    "solana"
+  );
   const [createGallery, setCreateGallery] = useState(false);
   const [galleryTitle, setGalleryTitle] = useState("");
   const [galleryDescription, setGalleryDescription] = useState("");
   const [mintNFTForGallery, setMintNFTForGallery] = useState(false);
   const [collectionName, setCollectionName] = useState("");
   const [collectionSymbol, setCollectionSymbol] = useState("");
-  const [accessControl, setAccessControl] = useState<'public' | 'nft_required' | 'trait_required'>('public');
+  const [accessControl, setAccessControl] = useState<
+    "public" | "nft_required" | "trait_required"
+  >("public");
   const [requiredNFT, setRequiredNFT] = useState("");
-  const [requiredTraits, setRequiredTraits] = useState<Record<string, string>>({});
+  const [requiredTraits, setRequiredTraits] = useState<Record<string, string>>(
+    {}
+  );
   const [newTraitKey, setNewTraitKey] = useState("");
   const [newTraitValue, setNewTraitValue] = useState("");
   const [isUploading, setIsUploading] = useState(false);
@@ -53,10 +76,11 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
 
   const { connection } = useWalletContext();
   const { uploadMediaToWalrus, uploadGalleryToWalrus } = useWalrusUpload();
-  const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+  const { mutateAsync: signAndExecuteTransaction } =
+    useSignAndExecuteTransaction();
   const solanaWallet = useSolanaWallet();
 
-  console.log('connection', connection);
+  console.log("connection", connection);
   const isConnected = connection?.isConnected || false;
   const address = connection?.address;
   const { toast } = useToast();
@@ -64,7 +88,7 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
   const handleFileSelect = (files: FileList | null) => {
     if (files) {
       const newFiles = Array.from(files);
-      setSelectedFiles(prev => [...prev, ...newFiles]);
+      setSelectedFiles((prev) => [...prev, ...newFiles]);
     }
   };
 
@@ -75,14 +99,14 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
   };
 
   const removeFile = (index: number) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const addTrait = () => {
     if (newTraitKey && newTraitValue) {
-      setRequiredTraits(prev => ({
+      setRequiredTraits((prev) => ({
         ...prev,
-        [newTraitKey]: newTraitValue
+        [newTraitKey]: newTraitValue,
       }));
       setNewTraitKey("");
       setNewTraitValue("");
@@ -90,7 +114,7 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
   };
 
   const removeTrait = (key: string) => {
-    setRequiredTraits(prev => {
+    setRequiredTraits((prev) => {
       const newTraits = { ...prev };
       delete newTraits[key];
       return newTraits;
@@ -98,7 +122,12 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
   };
 
   // Mint NFT on Sui
-  const mintSuiNFT = async (mediaUri: string, metadataUri: string, name: string, description: string) => {
+  const mintSuiNFT = async (
+    mediaUri: string,
+    metadataUri: string,
+    name: string,
+    description: string
+  ) => {
     try {
       const tx = new Transaction();
       tx.moveCall({
@@ -118,25 +147,34 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
 
       return {
         transactionHash: result.digest,
-        chain: 'sui' as const,
+        chain: "sui" as const,
       };
     } catch (error) {
-      console.error('Error minting Sui NFT:', error);
-      throw new Error(`Failed to mint Sui NFT: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error minting Sui NFT:", error);
+      throw new Error(
+        `Failed to mint Sui NFT: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
     }
   };
 
   // Mint NFT on Solana
-  const mintSolanaNFT = async (mediaUri: string, metadataUri: string, name: string, description: string) => {
+  const mintSolanaNFT = async (
+    mediaUri: string,
+    metadataUri: string,
+    name: string,
+    description: string
+  ) => {
     try {
       if (!solanaWallet.publicKey || !solanaWallet.signTransaction) {
-        throw new Error('Solana wallet not connected');
+        throw new Error("Solana wallet not connected");
       }
 
       const network = WalletAdapterNetwork.Testnet;
       const endpoint = clusterApiUrl(network);
       const connection = new Connection(endpoint);
-      
+
       const umi = createUmi(endpoint)
         .use(mplTokenMetadata())
         .use(walletAdapterIdentity(solanaWallet));
@@ -144,24 +182,24 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
       const mint = generateSigner(umi);
       const metadata = {
         name,
-        symbol: collectionSymbol || 'GALLERY',
+        symbol: collectionSymbol || "GALLERY",
         description,
         image: mediaUri,
         external_url: mediaUri,
         attributes: [
           {
-            trait_type: 'Gallery Access',
-            value: 'Premium',
+            trait_type: "Gallery Access",
+            value: "Premium",
           },
           {
-            trait_type: 'Chain',
-            value: 'Solana',
+            trait_type: "Chain",
+            value: "Solana",
           },
         ],
       };
 
       const metadataUri = `https://aggregator.walrus-testnet.walrus.space/v1/blobs/${Date.now()}`;
-      
+
       const nft = await createProgrammableNft(umi, {
         mint,
         name: metadata.name,
@@ -183,11 +221,15 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
 
       return {
         transactionHash: base58.deserialize(nft.signature)[0],
-        chain: 'solana' as const,
+        chain: "solana" as const,
       };
     } catch (error) {
-      console.error('Error minting Solana NFT:', error);
-      throw new Error(`Failed to mint Solana NFT: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error minting Solana NFT:", error);
+      throw new Error(
+        `Failed to mint Solana NFT: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
     }
   };
 
@@ -214,14 +256,21 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
 
     try {
       // Always upload all media to Walrus first
-      const mediaUris: { name: string; uri: string; type: 'image' | 'video' | 'audio' }[] = [];
+      const mediaUris: {
+        name: string;
+        uri: string;
+        type: "image" | "video" | "audio";
+      }[] = [];
       for (const file of selectedFiles) {
         const mediaFile: MediaFile = {
           file,
           name: title || file.name,
           description: description,
-          type: file.type.startsWith('image/') ? 'image' :
-            file.type.startsWith('video/') ? 'video' : 'audio',
+          type: file.type.startsWith("image/")
+            ? "image"
+            : file.type.startsWith("video/")
+            ? "video"
+            : "audio",
         };
         const { imageUri } = await uploadMediaToWalrus(mediaFile);
         mediaUris.push({
@@ -240,7 +289,9 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
 
       // Create gallery if selected
       if (createGallery && galleryTitle) {
-        galleryId = `${selectedChain}_gallery_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        galleryId = `${selectedChain}_gallery_${Date.now()}_${Math.random()
+          .toString(36)
+          .substr(2, 9)}`;
 
         const { galleryUri, transactionHash } = await uploadGalleryToWalrus(
           galleryId,
@@ -252,8 +303,9 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
           selectedChain,
           {
             type: accessControl,
-            requiredNFT: accessControl !== 'public' ? requiredNFT : undefined,
-            requiredTraits: accessControl === 'trait_required' ? requiredTraits : undefined,
+            requiredNFT: accessControl !== "public" ? requiredNFT : undefined,
+            requiredTraits:
+              accessControl === "trait_required" ? requiredTraits : undefined,
           }
         );
 
@@ -264,26 +316,36 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
       }
 
       // Mint NFT for gallery access if selected and private
-      if (mintNFTForGallery && visibility === 'private' && galleryId) {
+      if (mintNFTForGallery && visibility === "private" && galleryId) {
         try {
           const nftName = collectionName || `${galleryTitle} Access`;
           const nftDescription = `Access pass for gallery: ${galleryTitle}`;
-          
+
           let mintResult;
-          if (selectedChain === 'sui') {
+          if (selectedChain === "sui") {
             // Use the first media URI for Sui minting
             const firstMedia = mediaUris[0];
             if (!firstMedia) {
-              throw new Error('No media available for minting');
+              throw new Error("No media available for minting");
             }
-            mintResult = await mintSuiNFT(firstMedia.uri, firstMedia.uri, nftName, nftDescription);
+            mintResult = await mintSuiNFT(
+              firstMedia.uri,
+              firstMedia.uri,
+              nftName,
+              nftDescription
+            );
           } else {
             // Use the first media URI for Solana minting
             const firstMedia = mediaUris[0];
             if (!firstMedia) {
-              throw new Error('No media available for minting');
+              throw new Error("No media available for minting");
             }
-            mintResult = await mintSolanaNFT(firstMedia.uri, firstMedia.uri, nftName, nftDescription);
+            mintResult = await mintSolanaNFT(
+              firstMedia.uri,
+              firstMedia.uri,
+              nftName,
+              nftDescription
+            );
           }
 
           toast({
@@ -291,10 +353,12 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
             description: `Successfully minted access NFT for gallery "${galleryTitle}" on ${selectedChain} (Tx: ${mintResult.transactionHash})`,
           });
         } catch (error) {
-          console.error('Error minting NFT:', error);
+          console.error("Error minting NFT:", error);
           toast({
             title: "NFT Minting Failed",
-            description: `Failed to mint NFT: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            description: `Failed to mint NFT: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
             variant: "destructive",
           });
         }
@@ -304,23 +368,24 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
       setSelectedFiles([]);
       setTitle("");
       setDescription("");
-      setVisibility('public');
+      setVisibility("public");
       setCreateGallery(false);
       setGalleryTitle("");
       setGalleryDescription("");
       setMintNFTForGallery(false);
       setCollectionName("");
       setCollectionSymbol("");
-      setAccessControl('public');
+      setAccessControl("public");
       setRequiredNFT("");
       setRequiredTraits({});
 
       onOpenChange(false);
     } catch (error) {
-      console.error('Upload error:', error);
+      console.error("Upload error:", error);
       toast({
         title: "Upload Failed",
-        description: error instanceof Error ? error.message : "Failed to upload files",
+        description:
+          error instanceof Error ? error.message : "Failed to upload files",
         variant: "destructive",
       });
     } finally {
@@ -332,9 +397,12 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px] glass-card border-border max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-2xl font-bold">Create Gallery</DialogTitle>
+          <DialogTitle className="text-2xl font-bold">
+            Create Gallery
+          </DialogTitle>
           <DialogDescription className="text-base">
-            Upload your media files to Walrus storage and create a gallery with optional NFT access control
+            Upload your media files to Walrus storage and create a gallery with
+            optional NFT access control
           </DialogDescription>
         </DialogHeader>
 
@@ -347,8 +415,8 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
           <TabsContent value="upload" className="space-y-4">
             <div
               className={`border-2 border-dashed rounded-xl p-12 text-center transition-all duration-200 ${
-                dragActive 
-                  ? "border-primary bg-primary/5 scale-[1.02]" 
+                dragActive
+                  ? "border-primary bg-primary/5 scale-[1.02]"
                   : "border-border hover:border-primary/50 hover:bg-muted/30"
               }`}
               onDragEnter={() => setDragActive(true)}
@@ -357,12 +425,16 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
               onDrop={handleDrop}
             >
               <div className="flex flex-col items-center space-y-4">
-                <div className={`p-4 rounded-full transition-colors ${
-                  dragActive ? "bg-primary/10" : "bg-muted/50"
-                }`}>
-                  <Upload className={`w-8 h-8 transition-colors ${
-                    dragActive ? "text-primary" : "text-muted-foreground"
-                  }`} />
+                <div
+                  className={`p-4 rounded-full transition-colors ${
+                    dragActive ? "bg-primary/10" : "bg-muted/50"
+                  }`}
+                >
+                  <Upload
+                    className={`w-8 h-8 transition-colors ${
+                      dragActive ? "text-primary" : "text-muted-foreground"
+                    }`}
+                  />
                 </div>
                 <div className="space-y-2">
                   <p className="text-lg font-medium">
@@ -398,7 +470,9 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
             {selectedFiles.length > 0 && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <Label className="text-base font-medium">Selected Files ({selectedFiles.length})</Label>
+                  <Label className="text-base font-medium">
+                    Selected Files ({selectedFiles.length})
+                  </Label>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -410,13 +484,18 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
                 </div>
                 <div className="space-y-2 max-h-40 overflow-y-auto">
                   {selectedFiles.map((file, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border">
+                    <div
+                      key={index}
+                      className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border"
+                    >
                       <div className="flex items-center space-x-3 flex-1 min-w-0">
                         <div className="w-8 h-8 bg-primary/10 rounded flex items-center justify-center">
                           <Upload className="w-4 h-4 text-primary" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{file.name}</p>
+                          <p className="text-sm font-medium truncate">
+                            {file.name}
+                          </p>
                           <p className="text-xs text-muted-foreground">
                             {(file.size / 1024 / 1024).toFixed(2)} MB
                           </p>
@@ -438,7 +517,9 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
 
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="title" className="text-base font-medium">Media Title</Label>
+                <Label htmlFor="title" className="text-base font-medium">
+                  Media Title
+                </Label>
                 <Input
                   id="title"
                   placeholder="Enter a title for your media"
@@ -446,10 +527,14 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
                   onChange={(e) => setTitle(e.target.value)}
                   className="h-11"
                 />
-                <p className="text-xs text-muted-foreground">This title will be applied to all uploaded media</p>
+                <p className="text-xs text-muted-foreground">
+                  This title will be applied to all uploaded media
+                </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="description" className="text-base font-medium">Description</Label>
+                <Label htmlFor="description" className="text-base font-medium">
+                  Description
+                </Label>
                 <Textarea
                   id="description"
                   placeholder="Describe your media content"
@@ -457,11 +542,18 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
                   onChange={(e) => setDescription(e.target.value)}
                   className="min-h-[100px] resize-none"
                 />
-                <p className="text-xs text-muted-foreground">Provide context about your media</p>
+                <p className="text-xs text-muted-foreground">
+                  Provide context about your media
+                </p>
               </div>
               <div className="space-y-2">
                 <Label className="text-base font-medium">Visibility</Label>
-                <Select value={visibility} onValueChange={(value: 'public' | 'private') => setVisibility(value)}>
+                <Select
+                  value={visibility}
+                  onValueChange={(value: "public" | "private") =>
+                    setVisibility(value)
+                  }
+                >
                   <SelectTrigger className="h-11">
                     <SelectValue />
                   </SelectTrigger>
@@ -481,10 +573,9 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  {visibility === 'public' 
-                    ? 'Your gallery will be visible to everyone' 
-                    : 'Only users with the required NFT can access your gallery'
-                  }
+                  {visibility === "public"
+                    ? "Your gallery will be visible to everyone"
+                    : "Only users with the required NFT can access your gallery"}
                 </p>
               </div>
             </div>
@@ -501,7 +592,10 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
                   className="w-4 h-4 rounded border-border"
                 />
                 <div className="flex-1">
-                  <Label htmlFor="createGallery" className="text-base font-medium cursor-pointer">
+                  <Label
+                    htmlFor="createGallery"
+                    className="text-base font-medium cursor-pointer"
+                  >
                     Create New Gallery
                   </Label>
                   <p className="text-sm text-muted-foreground">
@@ -516,7 +610,12 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
                 <h3 className="text-lg font-semibold">Gallery Settings</h3>
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="galleryTitle" className="text-base font-medium">Gallery Title</Label>
+                    <Label
+                      htmlFor="galleryTitle"
+                      className="text-base font-medium"
+                    >
+                      Gallery Title
+                    </Label>
                     <Input
                       id="galleryTitle"
                       placeholder="Enter your gallery name"
@@ -526,7 +625,12 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="galleryDescription" className="text-base font-medium">Gallery Description</Label>
+                    <Label
+                      htmlFor="galleryDescription"
+                      className="text-base font-medium"
+                    >
+                      Gallery Description
+                    </Label>
                     <Textarea
                       id="galleryDescription"
                       placeholder="Describe your gallery theme and content"
@@ -536,8 +640,15 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-base font-medium">Blockchain Network</Label>
-                    <Select value={selectedChain} onValueChange={(value: 'solana' | 'sui') => setSelectedChain(value)}>
+                    <Label className="text-base font-medium">
+                      Blockchain Network
+                    </Label>
+                    <Select
+                      value={selectedChain}
+                      onValueChange={(value: "solana" | "sui") =>
+                        setSelectedChain(value)
+                      }
+                    >
                       <SelectTrigger className="h-11">
                         <SelectValue />
                       </SelectTrigger>
@@ -573,7 +684,10 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
                 className="w-4 h-4 rounded border-border"
               />
               <div className="flex-1">
-                <Label htmlFor="mintNFTForGallery" className="text-base font-medium cursor-pointer">
+                <Label
+                  htmlFor="mintNFTForGallery"
+                  className="text-base font-medium cursor-pointer"
+                >
                   Mint Access NFT
                 </Label>
                 <p className="text-sm text-muted-foreground">
@@ -584,11 +698,18 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
 
             {mintNFTForGallery && (
               <div className="space-y-4 p-4 bg-muted/20 rounded-lg border">
-                <h3 className="text-lg font-semibold">NFT Collection Settings</h3>
+                <h3 className="text-lg font-semibold">
+                  NFT Collection Settings
+                </h3>
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="collectionName" className="text-base font-medium">Collection Name</Label>
+                      <Label
+                        htmlFor="collectionName"
+                        className="text-base font-medium"
+                      >
+                        Collection Name
+                      </Label>
                       <Input
                         id="collectionName"
                         placeholder="Gallery Access Pass"
@@ -598,7 +719,12 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="collectionSymbol" className="text-base font-medium">Symbol</Label>
+                      <Label
+                        htmlFor="collectionSymbol"
+                        className="text-base font-medium"
+                      >
+                        Symbol
+                      </Label>
                       <Input
                         id="collectionSymbol"
                         placeholder="GACCESS"
@@ -610,8 +736,15 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-base font-medium">Access Control</Label>
-                    <Select value={accessControl} onValueChange={(value: 'public' | 'nft_required' | 'trait_required') => setAccessControl(value)}>
+                    <Label className="text-base font-medium">
+                      Access Control
+                    </Label>
+                    <Select
+                      value={accessControl}
+                      onValueChange={(
+                        value: "public" | "nft_required" | "trait_required"
+                      ) => setAccessControl(value)}
+                    >
                       <SelectTrigger className="h-11">
                         <SelectValue />
                       </SelectTrigger>
@@ -641,66 +774,73 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
                     </p>
                   </div>
 
-                {accessControl === 'nft_required' && (
-                  <div>
-                    <Label htmlFor="requiredNFT">Required NFT Contract</Label>
-                    <Input
-                      id="requiredNFT"
-                      placeholder="0x..."
-                      value={requiredNFT}
-                      onChange={(e) => setRequiredNFT(e.target.value)}
-                      className="glass-card border-border"
-                    />
-                  </div>
-                )}
-
-                {accessControl === 'trait_required' && (
-                  <div className="space-y-3">
-                    <Label>Required Traits</Label>
-                    <div className="flex gap-2">
+                  {accessControl === "nft_required" && (
+                    <div>
+                      <Label htmlFor="requiredNFT">Required NFT Contract</Label>
                       <Input
-                        placeholder="Trait name"
-                        value={newTraitKey}
-                        onChange={(e) => setNewTraitKey(e.target.value)}
+                        id="requiredNFT"
+                        placeholder="0x..."
+                        value={requiredNFT}
+                        onChange={(e) => setRequiredNFT(e.target.value)}
                         className="glass-card border-border"
                       />
-                      <Input
-                        placeholder="Trait value"
-                        value={newTraitValue}
-                        onChange={(e) => setNewTraitValue(e.target.value)}
-                        className="glass-card border-border"
-                      />
-                      <Button type="button" onClick={addTrait} size="sm">
-                        <Plus className="w-4 h-4" />
-                      </Button>
                     </div>
-                    {Object.keys(requiredTraits).length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {Object.entries(requiredTraits).map(([key, value]) => (
-                          <Badge key={key} variant="secondary" className="flex items-center gap-1">
-                            {key}: {value}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removeTrait(key)}
-                              className="h-4 w-4 p-0"
-                            >
-                              <X className="w-3 h-3" />
-                            </Button>
-                          </Badge>
-                        ))}
+                  )}
+
+                  {accessControl === "trait_required" && (
+                    <div className="space-y-3">
+                      <Label>Required Traits</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Trait name"
+                          value={newTraitKey}
+                          onChange={(e) => setNewTraitKey(e.target.value)}
+                          className="glass-card border-border"
+                        />
+                        <Input
+                          placeholder="Trait value"
+                          value={newTraitValue}
+                          onChange={(e) => setNewTraitValue(e.target.value)}
+                          className="glass-card border-border"
+                        />
+                        <Button type="button" onClick={addTrait} size="sm">
+                          <Plus className="w-4 h-4" />
+                        </Button>
                       </div>
-                    )}
-                  </div>
-                )}
+                      {Object.keys(requiredTraits).length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {Object.entries(requiredTraits).map(
+                            ([key, value]) => (
+                              <Badge
+                                key={key}
+                                variant="secondary"
+                                className="flex items-center gap-1"
+                              >
+                                {key}: {value}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => removeTrait(key)}
+                                  className="h-4 w-4 p-0"
+                                >
+                                  <X className="w-3 h-3" />
+                                </Button>
+                              </Badge>
+                            )
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </TabsContent>
         </Tabs>
 
         <div className="flex gap-3 justify-end pt-4 border-t">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={isUploading}
             className="px-6"
@@ -716,12 +856,12 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
             {isUploading ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                {createGallery ? 'Creating Gallery...' : 'Uploading...'}
+                {createGallery ? "Creating Gallery..." : "Uploading..."}
               </>
             ) : (
               <>
                 <Upload className="w-4 h-4 mr-2" />
-                {createGallery ? 'Create Gallery' : 'Upload Media'}
+                {createGallery ? "Create Gallery" : "Upload Media"}
               </>
             )}
           </Button>
