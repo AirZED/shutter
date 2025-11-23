@@ -7,11 +7,13 @@ import { Bot, X, Send } from "lucide-react";
 const helpMessages = [
   {
     role: "assistant",
-    content: "👋 Hi! I'm here to help you navigate VaultMedia. You can upload media, create galleries, and set NFT-gated access to your content.",
+    content:
+      "👋 Hi! I'm here to help you navigate Shutter. You can upload media, create galleries, and set NFT-gated access to your content.",
   },
   {
     role: "assistant",
-    content: "💡 Quick tips:\n• Click on a gallery to view its media\n• Use the Upload button to add new content\n• Connect your wallet to access locked content",
+    content:
+      "💡 Quick tips:\n• Click on a gallery to view its media\n• Use the Upload button to add new content\n• Connect your wallet to access locked content",
   },
 ];
 
@@ -32,7 +34,8 @@ export const AIAssistant = () => {
         ...prev,
         {
           role: "assistant",
-          content: "I'm here to help! Here are some common actions:\n• Browse galleries on the home page\n• Click any gallery to see its media\n• Use the chat in galleries to discuss with others",
+          content:
+            "I'm here to help! Here are some common actions:\n• Browse galleries on the home page\n• Click any gallery to see its media\n• Use the chat in galleries to discuss with others",
         },
       ]);
     }, 500);
@@ -55,7 +58,7 @@ export const AIAssistant = () => {
           <div className="flex items-center justify-between p-4 border-b border-primary/10">
             <div className="flex items-center gap-2">
               <Bot className="h-5 w-5 text-primary" />
-              <h3 className="font-semibold">VaultMedia Assistant</h3>
+              <h3 className="font-semibold">Shutter Assistant</h3>
             </div>
             <Button
               variant="ghost"
@@ -72,7 +75,9 @@ export const AIAssistant = () => {
               {messages.map((msg, idx) => (
                 <div
                   key={idx}
-                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                  className={`flex ${
+                    msg.role === "user" ? "justify-end" : "justify-start"
+                  }`}
                 >
                   <div
                     className={`max-w-[80%] p-3 rounded-lg ${
