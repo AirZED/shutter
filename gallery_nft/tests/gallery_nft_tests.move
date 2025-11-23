@@ -2,13 +2,15 @@
 module gallery_nft::gallery_nft_tests;
 
 use gallery_nft::gallery_nft::{Self, GalleryNFT};
-use std::string;
+use std::string::{utf8, String};
 use sui::test_scenario::{Self as ts, Scenario};
 use sui::test_utils;
 
 const ADMIN: address = @0xAD;
 const USER1: address = @0xB1;
 const USER2: address = @0xB2;
+
+const DUMMY_AGGREGATOR: vector<u8> = b"https://aggregator.walrus-testnet.walrus.space/v1/blobs/";
 
 // === Test Helpers ===
 
@@ -24,11 +26,14 @@ fun mint_test_nft(scenario: &mut Scenario, sender: address) {
     ts::next_tx(scenario, sender);
     {
         let ctx = ts::ctx(scenario);
+        let blob_id = b"QmAbCdEf123456789";
+        let image_url = utf8(concat_vec(DUMMY_AGGREGATOR, blob_id));
         gallery_nft::mint(
-            b"Sunset Photo".to_string(),
-            b"Beautiful sunset at the beach".to_string(),
-            b"QmAbCdEf123456789".to_string(),
-            b"premium".to_string(),
+            utf8(b"Sunset Photo"),
+            utf8(b"Beautiful sunset at the beach"),
+            utf8(blob_id),
+            image_url,
+            utf8(b"premium"),
             ctx,
         );
     };
@@ -44,11 +49,14 @@ fun test_mint_nft() {
     ts::next_tx(&mut scenario, USER1);
     {
         let ctx = ts::ctx(&mut scenario);
+        let blob_id = b"QmTestBlobId12345";
+        let image_url = utf8(concat_vec(DUMMY_AGGREGATOR, blob_id));
         gallery_nft::mint(
-            b"My First Image".to_string(),
-            b"This is my first uploaded image".to_string(),
-            b"QmTestBlobId12345".to_string(),
-            b"public".to_string(),
+            utf8(b"My First Image"),
+            utf8(b"This is my first uploaded image"),
+            utf8(blob_id),
+            image_url,
+            utf8(b"public"),
             ctx,
         );
     };
@@ -58,11 +66,15 @@ fun test_mint_nft() {
     {
         let nft = ts::take_from_sender<GalleryNFT>(&scenario);
 
-        assert!(gallery_nft::name(&nft) == b"My First Image".to_string(), 0);
-        assert!(gallery_nft::description(&nft) == b"This is my first uploaded image".to_string(), 1);
-        assert!(gallery_nft::walrus_blob_id(&nft) == b"QmTestBlobId12345".to_string(), 2);
+        assert!(gallery_nft::name(&nft) == utf8(b"My First Image"), 0);
+        assert!(gallery_nft::description(&nft) == utf8(b"This is my first uploaded image"), 1);
+        assert!(gallery_nft::walrus_blob_id(&nft) == utf8(b"QmTestBlobId12345"), 2);
+        assert!(
+            gallery_nft::url(&nft) == utf8(concat_vec(DUMMY_AGGREGATOR, b"QmTestBlobId12345")),
+            6,
+        ); // New: Check URL
         assert!(gallery_nft::creator(&nft) == USER1, 3);
-        assert!(gallery_nft::access_tier(&nft) == b"public".to_string(), 4);
+        assert!(gallery_nft::access_tier(&nft) == utf8(b"public"), 4);
 
         ts::return_to_sender(&scenario, nft);
     };
@@ -78,11 +90,14 @@ fun test_mint_multiple_nfts() {
     ts::next_tx(&mut scenario, USER1);
     {
         let ctx = ts::ctx(&mut scenario);
+        let blob_id = b"BlobId1";
+        let image_url = utf8(concat_vec(DUMMY_AGGREGATOR, blob_id));
         gallery_nft::mint(
-            b"Image 1".to_string(),
-            b"First image".to_string(),
-            b"BlobId1".to_string(),
-            b"public".to_string(),
+            utf8(b"Image 1"),
+            utf8(b"First image"),
+            utf8(blob_id),
+            image_url,
+            utf8(b"public"),
             ctx,
         );
     };
@@ -91,11 +106,14 @@ fun test_mint_multiple_nfts() {
     ts::next_tx(&mut scenario, USER2);
     {
         let ctx = ts::ctx(&mut scenario);
+        let blob_id = b"BlobId2";
+        let image_url = utf8(concat_vec(DUMMY_AGGREGATOR, blob_id));
         gallery_nft::mint(
-            b"Image 2".to_string(),
-            b"Second image".to_string(),
-            b"BlobId2".to_string(),
-            b"premium".to_string(),
+            utf8(b"Image 2"),
+            utf8(b"Second image"),
+            utf8(blob_id),
+            image_url,
+            utf8(b"premium"),
             ctx,
         );
     };
@@ -104,7 +122,7 @@ fun test_mint_multiple_nfts() {
     ts::next_tx(&mut scenario, USER1);
     {
         let nft = ts::take_from_sender<GalleryNFT>(&scenario);
-        assert!(gallery_nft::name(&nft) == string::utf8(b"Image 1"), 0);
+        assert!(gallery_nft::name(&nft) == utf8(b"Image 1"), 0);
         assert!(gallery_nft::creator(&nft) == USER1, 1);
         ts::return_to_sender(&scenario, nft);
     };
@@ -113,9 +131,9 @@ fun test_mint_multiple_nfts() {
     ts::next_tx(&mut scenario, USER2);
     {
         let nft = ts::take_from_sender<GalleryNFT>(&scenario);
-        assert!(gallery_nft::name(&nft) == string::utf8(b"Image 2"), 0);
+        assert!(gallery_nft::name(&nft) == utf8(b"Image 2"), 0);
         assert!(gallery_nft::creator(&nft) == USER2, 1);
-        assert!(gallery_nft::access_tier(&nft) == string::utf8(b"premium"), 2);
+        assert!(gallery_nft::access_tier(&nft) == utf8(b"premium"), 2);
         ts::return_to_sender(&scenario, nft);
     };
 
@@ -141,7 +159,7 @@ fun test_transfer_nft() {
     ts::next_tx(&mut scenario, USER2);
     {
         let nft = ts::take_from_sender<GalleryNFT>(&scenario);
-        assert!(gallery_nft::name(&nft) == string::utf8(b"Sunset Photo"), 0);
+        assert!(gallery_nft::name(&nft) == utf8(b"Sunset Photo"), 0);
         assert!(gallery_nft::creator(&nft) == USER1, 1); // Creator remains USER1
         ts::return_to_sender(&scenario, nft);
     };
@@ -164,7 +182,7 @@ fun test_update_description() {
 
         gallery_nft::update_description(&mut nft, b"Updated description", ctx);
 
-        assert!(gallery_nft::description(&nft) == string::utf8(b"Updated description"), 0);
+        assert!(gallery_nft::description(&nft) == utf8(b"Updated description"), 0);
 
         ts::return_to_sender(&scenario, nft);
     };
@@ -204,11 +222,14 @@ fun test_has_access_tier() {
     ts::next_tx(&mut scenario, USER1);
     {
         let ctx = ts::ctx(&mut scenario);
+        let blob_id = b"PremiumBlobId";
+        let image_url = utf8(concat_vec(DUMMY_AGGREGATOR, blob_id));
         gallery_nft::mint(
-            b"Premium Image".to_string(),
-            b"Premium access only".to_string(),
-            b"PremiumBlobId".to_string(),
-            b"premium".to_string(),
+            utf8(b"Premium Image"),
+            utf8(b"Premium access only"),
+            utf8(blob_id),
+            image_url,
+            utf8(b"premium"),
             ctx,
         );
     };
@@ -218,9 +239,9 @@ fun test_has_access_tier() {
     {
         let nft = ts::take_from_sender<GalleryNFT>(&scenario);
 
-        assert!(gallery_nft::has_access_tier(&nft, string::utf8(b"premium")), 0);
-        assert!(!gallery_nft::has_access_tier(&nft, string::utf8(b"public")), 1);
-        assert!(!gallery_nft::has_access_tier(&nft, string::utf8(b"exclusive")), 2);
+        assert!(gallery_nft::has_access_tier(&nft, utf8(b"premium")), 0);
+        assert!(!gallery_nft::has_access_tier(&nft, utf8(b"public")), 1);
+        assert!(!gallery_nft::has_access_tier(&nft, utf8(b"exclusive")), 2);
 
         ts::return_to_sender(&scenario, nft);
     };
@@ -232,20 +253,23 @@ fun test_has_access_tier() {
 fun test_different_access_tiers() {
     let mut scenario = setup_test();
 
-    let tiers = vector[b"public", b"premium", b"exclusive", b"vip"];
+    let tiers = vector[utf8(b"public"), utf8(b"premium"), utf8(b"exclusive"), utf8(b"vip")];
     let mut i = 0;
 
     while (i < std::vector::length(&tiers)) {
         let tier = *std::vector::borrow(&tiers, i);
+        let blob_id = concat_vec(b"TestBlobId", std::vector::borrow(&tiers, i)); // Dummy blob ID per tier
 
         ts::next_tx(&mut scenario, USER1);
         {
             let ctx = ts::ctx(&mut scenario);
+            let image_url = utf8(concat_vec(DUMMY_AGGREGATOR, blob_id));
             gallery_nft::mint(
-                b"Test Image".to_string(),
-                b"Test Description".to_string(),
-                b"TestBlobId".to_string(),
-                tier.to_string(),
+                utf8(b"Test Image"),
+                utf8(b"Test Description"),
+                utf8(blob_id),
+                image_url,
+                tier,
                 ctx,
             );
         };
@@ -253,7 +277,7 @@ fun test_different_access_tiers() {
         ts::next_tx(&mut scenario, USER1);
         {
             let nft = ts::take_from_sender<GalleryNFT>(&scenario);
-            assert!(gallery_nft::access_tier(&nft) == string::utf8(tier), i);
+            assert!(gallery_nft::access_tier(&nft) == tier, i);
 
             let ctx = ts::ctx(&mut scenario);
             gallery_nft::burn(nft, ctx);
@@ -273,11 +297,14 @@ fun test_view_functions() {
     ts::next_tx(&mut scenario, USER1);
     {
         let ctx = ts::ctx(&mut scenario);
+        let blob_id = b"TestBlobId123";
+        let image_url = utf8(concat_vec(DUMMY_AGGREGATOR, blob_id));
         gallery_nft::mint(
-            b"Test Name".to_string(),
-            b"Test Description".to_string(),
-            b"TestBlobId123".to_string(),
-            b"premium".to_string(),
+            utf8(b"Test Name"),
+            utf8(b"Test Description"),
+            utf8(blob_id),
+            image_url,
+            utf8(b"premium"),
             ctx,
         );
     };
@@ -287,11 +314,12 @@ fun test_view_functions() {
     {
         let nft = ts::take_from_sender<GalleryNFT>(&scenario);
 
-        assert!(gallery_nft::name(&nft) == string::utf8(b"Test Name"), 0);
-        assert!(gallery_nft::description(&nft) == string::utf8(b"Test Description"), 1);
-        assert!(gallery_nft::walrus_blob_id(&nft) == string::utf8(b"TestBlobId123"), 2);
+        assert!(gallery_nft::name(&nft) == utf8(b"Test Name"), 0);
+        assert!(gallery_nft::description(&nft) == utf8(b"Test Description"), 1);
+        assert!(gallery_nft::walrus_blob_id(&nft) == utf8(b"TestBlobId123"), 2);
+        assert!(gallery_nft::url(&nft) == utf8(concat_vec(DUMMY_AGGREGATOR, b"TestBlobId123")), 7); // New: Check URL
         assert!(gallery_nft::creator(&nft) == USER1, 3);
-        assert!(gallery_nft::access_tier(&nft) == string::utf8(b"premium"), 4);
+        assert!(gallery_nft::access_tier(&nft) == utf8(b"premium"), 4);
         assert!(gallery_nft::created_at(&nft) >= 0, 5);
 
         ts::return_to_sender(&scenario, nft);
@@ -301,18 +329,19 @@ fun test_view_functions() {
 }
 
 #[test]
-#[expected_failure(abort_code = gallery_nft::EInvalidBlobId)]
-fun test_mint_with_empty_blob_id_fails() {
+#[expected_failure(abort_code = gallery_nft::EInvalidUrl)]
+fun test_mint_with_empty_url_fails() {
     let mut scenario = setup_test();
 
     ts::next_tx(&mut scenario, USER1);
     {
         let ctx = ts::ctx(&mut scenario);
         gallery_nft::mint(
-            b"Test Name".to_string(),
-            b"Test Description".to_string(),
-            b"".to_string(), // Empty blob ID
-            b"premium".to_string(),
+            utf8(b"Test Name"),
+            utf8(b"Test Description"),
+            utf8(b"TestBlobId"), // Valid blob ID
+            utf8(b""), // Empty URL
+            utf8(b"premium"),
             ctx,
         );
     };
@@ -328,11 +357,14 @@ fun test_mint_with_empty_access_tier_fails() {
     ts::next_tx(&mut scenario, USER1);
     {
         let ctx = ts::ctx(&mut scenario);
+        let blob_id = b"TestBlobId";
+        let image_url = utf8(concat_vec(DUMMY_AGGREGATOR, blob_id));
         gallery_nft::mint(
-            b"Test Name".to_string(),
-            b"Test Description".to_string(),
-            b"TestBlobId".to_string(),
-            b"".to_string(), // Empty access tier
+            utf8(b"Test Name"),
+            utf8(b"Test Description"),
+            utf8(blob_id),
+            image_url,
+            utf8(b""), // Empty access tier
             ctx,
         );
     };
