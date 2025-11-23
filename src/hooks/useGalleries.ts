@@ -38,12 +38,12 @@ export const useGalleries = (userAddress?: string | null) => {
 
   const AGGREGATOR = "https://aggregator.walrus-testnet.walrus.space";
 
-  // Fetch galleries from on-chain Gallery objects
-  const fetchGalleriesFromChain = async (address: string): Promise<Gallery[]> => {
+  // Fetch ALL galleries from on-chain Gallery objects (public - visible to everyone)
+  const fetchAllGalleriesFromChain = async (): Promise<Gallery[]> => {
     try {
       const onChainGalleries: Gallery[] = [];
 
-      // Query all owned objects for Gallery type
+      // Query all Gallery objects using RPC API (not just owned by user)
       const packageId = GALLERY_NFT_PACKAGEID;
       const galleryType = `${packageId}::gallery_nft::Gallery`;
 
@@ -51,23 +51,183 @@ export const useGalleries = (userAddress?: string | null) => {
       let hasNextPage = true;
 
       while (hasNextPage) {
-        const ownedObjects = await suiClient.getOwnedObjects({
-          owner: address,
+        // Use RPC API to query all objects of Gallery type
+        const queryParams: any = {
           filter: {
             StructType: galleryType,
           },
           options: {
             showContent: true,
             showType: true,
+            showOwner: true,
           },
-          cursor: cursor || undefined,
           limit: 50,
-        });
+        };
+
+        if (cursor) {
+          queryParams.cursor = cursor;
+        }
+
+        // Use RPC API directly to query all objects of Gallery type
+        // Try multiple RPC methods as different endpoints may support different methods
+        let queryResult: any;
+        const rpcUrl = getFullnodeUrl('testnet');
+
+        try {
+          // Try suix_queryObjects first (most common)
+          const response = await axios.post(rpcUrl, {
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'suix_queryObjects',
+            params: [queryParams],
+          });
+
+          if (response.data.error) {
+            throw new Error(response.data.error.message || 'RPC error');
+          }
+
+          queryResult = response.data.result;
+        } catch (rpcError: any) {
+          console.warn('suix_queryObjects failed, trying alternative methods...', rpcError?.response?.data || rpcError?.message);
+
+          // Fallback: Query transactions that called create_gallery to find gallery objects
+          // This is a workaround when direct object querying isn't available
+          try {
+            const packageId = GALLERY_NFT_PACKAGEID;
+            const txResponse = await axios.post(rpcUrl, {
+              jsonrpc: '2.0',
+              id: 2,
+              method: 'suix_queryTransactionBlocks',
+              params: [{
+                filter: {
+                  MoveFunction: {
+                    package: packageId,
+                    module: 'gallery_nft',
+                    function: 'create_gallery',
+                  },
+                },
+                options: {
+                  showInput: false,
+                  showEffects: true,
+                  showEvents: false,
+                  showObjectChanges: true,
+                },
+                limit: 50,
+              }],
+            });
+
+            if (txResponse.data.error) {
+              throw new Error(txResponse.data.error.message || 'Transaction query error');
+            }
+
+            const transactions = txResponse.data.result?.data || [];
+            const galleryObjectIds: string[] = [];
+
+            // Extract gallery object IDs from transaction object changes
+            for (const tx of transactions) {
+              if (tx.objectChanges) {
+                for (const change of tx.objectChanges) {
+                  // Look for created objects of type Gallery
+                  if (change.type === 'created' && change.objectType?.includes('Gallery')) {
+                    galleryObjectIds.push(change.objectId);
+                  }
+                }
+              }
+            }
+
+            // Fetch each gallery object
+            for (const galleryId of galleryObjectIds) {
+              try {
+                const galleryObj = await suiClient.getObject({
+                  id: galleryId,
+                  options: {
+                    showContent: true,
+                    showType: true,
+                    showOwner: true,
+                  },
+                });
+
+                if (galleryObj.data?.content && 'fields' in galleryObj.data.content) {
+                  const fields = galleryObj.data.content.fields as any;
+                  const owner = galleryObj.data.owner && typeof galleryObj.data.owner === 'object' && 'AddressOwner' in galleryObj.data.owner
+                    ? galleryObj.data.owner.AddressOwner
+                    : '';
+
+                  let fullGalleryData: any = null;
+                  if (fields.gallery_uri) {
+                    try {
+                      const galleryResponse = await axios.get(fields.gallery_uri);
+                      fullGalleryData = galleryResponse.data;
+                    } catch (err) {
+                      console.error('Error fetching gallery metadata from URI:', fields.gallery_uri, err);
+                    }
+                  }
+
+                  onChainGalleries.push({
+                    id: fields.gallery_id || galleryId,
+                    title: fields.title || 'Untitled Gallery',
+                    description: fields.description || '',
+                    thumbnail: fields.thumbnail || '',
+                    mediaCount: Number(fields.media_count) || 0,
+                    isLocked: fields.is_locked || false,
+                    participantCount: fullGalleryData?.participantCount || 0,
+                    requiredNFT: fields.required_nft || fullGalleryData?.requiredNFT,
+                    requiredTraits: fullGalleryData?.requiredTraits,
+                    chain: 'sui',
+                    owner: owner || '',
+                    visibility: fields.visibility || 'public',
+                    createdAt: new Date(Number(fields.created_at) * 1000).toISOString(),
+                    updatedAt: new Date(Number(fields.updated_at) * 1000).toISOString(),
+                    galleryUri: fields.gallery_uri || '',
+                    mediaUris: fullGalleryData?.mediaUris || [],
+                  });
+                }
+              } catch (objError) {
+                console.error(`Error fetching gallery object ${galleryId}:`, objError);
+              }
+            }
+
+            // If we found galleries via transactions, return them
+            if (onChainGalleries.length > 0) {
+              return onChainGalleries;
+            }
+          } catch (eventError) {
+            console.error('All query methods failed:', eventError);
+            // If all methods fail, we can't fetch galleries without an indexer
+            break;
+          }
+        }
+
+        // Only process objects if queryResult was successfully obtained
+        if (!queryResult) {
+          // If we already got galleries from the fallback method, return them
+          if (onChainGalleries.length > 0) {
+            return onChainGalleries;
+          }
+          // Otherwise, break and return empty array
+          break;
+        }
+
+        const objects = queryResult.data || queryResult.objects || [];
 
         // Process each Gallery object
-        for (const obj of ownedObjects.data) {
-          if (obj.data?.content && 'fields' in obj.data.content) {
-            const fields = obj.data.content.fields as any;
+        for (const obj of objects) {
+          // Handle both RPC response format and SDK format
+          const objData = obj.data || obj;
+
+          if (objData?.content && 'fields' in objData.content) {
+            const fields = objData.content.fields as any;
+
+            // Get owner from object data
+            let owner = '';
+            if (objData.owner) {
+              if (typeof objData.owner === 'string') {
+                owner = objData.owner;
+              } else if (typeof objData.owner === 'object' && 'AddressOwner' in objData.owner) {
+                owner = objData.owner.AddressOwner;
+              }
+            }
+            const objectId = objData.objectId || obj.objectId || '';
 
             // Fetch full gallery metadata from Walrus if gallery_uri exists
             let fullGalleryData: any = null;
@@ -81,7 +241,7 @@ export const useGalleries = (userAddress?: string | null) => {
             }
 
             onChainGalleries.push({
-              id: fields.gallery_id || obj.data.objectId,
+              id: fields.gallery_id || objectId,
               title: fields.title || 'Untitled Gallery',
               description: fields.description || '',
               thumbnail: fields.thumbnail || '',
@@ -91,7 +251,7 @@ export const useGalleries = (userAddress?: string | null) => {
               requiredNFT: fields.required_nft || fullGalleryData?.requiredNFT,
               requiredTraits: fullGalleryData?.requiredTraits,
               chain: 'sui',
-              owner: address,
+              owner: owner || '',
               visibility: fields.visibility || 'public',
               createdAt: new Date(Number(fields.created_at) * 1000).toISOString(),
               updatedAt: new Date(Number(fields.updated_at) * 1000).toISOString(),
@@ -101,13 +261,13 @@ export const useGalleries = (userAddress?: string | null) => {
           }
         }
 
-        cursor = ownedObjects.nextCursor || null;
-        hasNextPage = ownedObjects.hasNextPage;
+        cursor = queryResult.nextCursor || null;
+        hasNextPage = queryResult.hasNextPage || false;
       }
 
       return onChainGalleries;
     } catch (err) {
-      console.error('Error fetching galleries from chain:', err);
+      console.error('Error fetching all galleries from chain:', err);
       return [];
     }
   };
@@ -117,35 +277,9 @@ export const useGalleries = (userAddress?: string | null) => {
       setLoading(true);
       setError(null);
 
-      const allGalleries: Gallery[] = [];
-
-      // Fetch galleries from on-chain Gallery objects only (no localStorage)
-      if (userAddress) {
-        const chainGalleries = await fetchGalleriesFromChain(userAddress);
-        allGalleries.push(...chainGalleries);
-      }
-
-      // Add mock galleries for demo (only if no user galleries found)
-      if (allGalleries.length === 0) {
-        const mockGalleries: Gallery[] = [
-          {
-            id: "1",
-            title: "Sunset Photography Collection",
-            description: "A curated collection of breathtaking sunset photographs from around the world",
-            thumbnail: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&h=400&fit=crop",
-            mediaCount: 12,
-            isLocked: false,
-            participantCount: 24,
-            owner: "0x123...",
-            visibility: 'public',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            galleryUri: "https://blob.walrus.testnet.space/mock-gallery-1",
-            mediaUris: [],
-          },
-        ];
-        allGalleries.push(...mockGalleries);
-      }
+      // Fetch ALL galleries from on-chain (public - visible to everyone)
+      // Galleries are always public, NFT is only required for viewing media
+      const allGalleries = await fetchAllGalleriesFromChain();
 
       setGalleries(allGalleries);
     } catch (err) {

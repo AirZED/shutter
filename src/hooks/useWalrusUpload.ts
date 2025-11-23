@@ -142,19 +142,21 @@ export const useWalrusUpload = () => {
     }> => {
         try {
             // Create gallery metadata
+            // Galleries are always public - isLocked indicates NFT required for media viewing
+            const requiresNFT = visibility === 'private' || accessControl.type !== 'public';
             const galleryMetadata = {
                 galleryId,
                 title,
                 description,
                 mediaUris,
                 owner,
-                visibility,
+                visibility: 'public', // Always public - galleries are visible to everyone
                 chain,
                 accessControl,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
                 participantCount: 0,
-                isLocked: visibility === 'private',
+                isLocked: requiresNFT, // True if NFT required for viewing media
             };
 
             // Upload gallery metadata to Walrus using HTTP API
