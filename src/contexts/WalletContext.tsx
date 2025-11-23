@@ -9,30 +9,26 @@ import React, {
 } from "react";
 import { SuiClient } from "@mysten/sui/client";
 import { getFullnodeUrl } from "@mysten/sui/client";
-import { useWallet as useSolanaWallet } from "@solana/wallet-adapter-react";
-import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { useCurrentAccount, useDisconnectWallet } from "@mysten/dapp-kit";
-import { PublicKey } from "@solana/web3.js";
+import { GALLERY_NFT_PACKAGEID } from "@/lib/constants";
 
 // Types
 export interface WalletConnection {
   address: string;
-  chain: "solana" | "sui";
+  chain: "sui";
   isConnected: boolean;
-  publicKey?: PublicKey; // For Solana
 }
 
 export interface WalletContextType {
   // Connection state
   connection: WalletConnection | null;
   address: string | null;
-  chain: "solana" | "sui" | null;
+  chain: "sui" | null;
   isConnected: boolean;
 
   // Connection actions
   isConnecting: boolean;
   error: string | null;
-  connectSolanaWallet: () => Promise<void>;
   connectSuiWallet: () => Promise<void>;
   disconnectWallet: () => void;
 
@@ -57,24 +53,13 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
   const [error, setError] = useState<string | null>(null);
   const [showSuiConnectModal, setShowSuiConnectModal] = useState(false);
 
-  // Solana hooks
-  const solanaWallet = useSolanaWallet();
-  const { setVisible } = useWalletModal();
-
   // Sui hooks
   const currentAccount = useCurrentAccount();
   const suiDisconnect = useDisconnectWallet();
 
   // Sync connection state from chain providers
   useEffect(() => {
-    if (solanaWallet.connected && solanaWallet.publicKey) {
-      setConnection({
-        address: solanaWallet.publicKey.toBase58(),
-        chain: "solana",
-        isConnected: true,
-        publicKey: solanaWallet.publicKey,
-      });
-    } else if (currentAccount) {
+    if (currentAccount) {
       setConnection({
         address: currentAccount.address,
         chain: "sui",
@@ -83,7 +68,7 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
     } else {
       setConnection(null);
     }
-  }, [solanaWallet.connected, solanaWallet.publicKey, currentAccount]);
+  }, [currentAccount]);
 
   // Save connection to localStorage
   useEffect(() => {
@@ -93,21 +78,6 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
       localStorage.removeItem("wallet-connection");
     }
   }, [connection]);
-
-  const connectSolanaWallet = async () => {
-    setIsConnecting(true);
-    setError(null);
-    try {
-      await setVisible(true);
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to connect Solana wallet";
-      setError(errorMessage);
-      throw err;
-    } finally {
-      setIsConnecting(false);
-    }
-  };
 
   const connectSuiWallet = async () => {
     setIsConnecting(true);
@@ -129,9 +99,7 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
 
     setIsConnecting(true);
     try {
-      if (connection.chain === "solana") {
-        solanaWallet.disconnect();
-      } else if (connection.chain === "sui") {
+      if (connection.chain === "sui") {
         suiDisconnect.mutate();
       }
     } catch (err) {
@@ -150,11 +118,7 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
     }
 
     try {
-      if (connection.chain === "solana") {
-        // Placeholder for Solana NFT verification (implement with Metaplex/Umi for full support)
-        console.log("Solana NFT verification placeholder - returning true");
-        return true;
-      } else if (connection.chain === "sui") {
+      if (connection.chain === "sui") {
         const suiClient = new SuiClient({
           url: getFullnodeUrl("testnet"),
         });
@@ -173,7 +137,7 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
           cursor = ownedObjects.nextCursor;
         } while (cursor);
 
-        // Check each owned object for matching collection
+        // Check each owned object for matching collection or package
         for (const object of allOwnedObjects) {
           if (object.data?.objectId) {
             const objectDetails = await suiClient.getObject({
@@ -186,13 +150,25 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
             });
 
             const data = objectDetails.data;
-            if (
+
+            // Check if object is from the gallery_nft package
+            // If collectionAddress is the package ID or empty, check for any gallery_nft NFT
+            const isGalleryNFT = data?.type?.includes(GALLERY_NFT_PACKAGEID) ||
+              data?.type?.includes('gallery_nft::GalleryNFT') ||
+              data?.type?.includes('GalleryNFT');
+
+            // Check if it matches the specific collection address
+            const matchesCollection = collectionAddress && collectionAddress !== GALLERY_NFT_PACKAGEID && (
               data?.type?.includes(collectionAddress) ||
               (data?.content &&
                 "fields" in data.content &&
                 (data.content.fields as Record<string, unknown>)
                   ?.collection_id === collectionAddress)
-            ) {
+            );
+
+            // If no collection address specified or it's the gallery_nft package, accept any GalleryNFT
+            // Otherwise, check for specific collection match
+            if (isGalleryNFT && (!collectionAddress || collectionAddress === GALLERY_NFT_PACKAGEID || matchesCollection)) {
               // Check traits if required
               if (requiredTraits) {
                 const fields =
@@ -248,7 +224,6 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
     // Connection actions
     isConnecting,
     error,
-    connectSolanaWallet,
     connectSuiWallet,
     disconnectWallet,
 

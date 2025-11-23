@@ -11,7 +11,7 @@ export interface Gallery {
   participantCount: number;
   requiredNFT?: string;
   requiredTraits?: Record<string, string>;
-  chain?: 'solana' | 'sui';
+  chain?: 'sui';
   owner: string;
   visibility: 'public' | 'private';
   createdAt: string;
@@ -58,13 +58,13 @@ export const useGalleries = () => {
         },
         {
           id: "2",
-          title: "Exclusive Solana NFT Gallery",
-          description: "Premium digital art collection accessible only to verified Solana NFT holders",
+          title: "Exclusive Sui NFT Gallery",
+          description: "Premium digital art collection accessible only to verified Sui NFT holders",
           thumbnail: "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=400&h=400&fit=crop",
           mediaCount: 8,
           isLocked: true,
           requiredNFT: "0x1234567890abcdef1234567890abcdef12345678",
-          chain: 'solana',
+          chain: 'sui',
           participantCount: 15,
           owner: "0x456...",
           visibility: 'private',
@@ -111,7 +111,13 @@ export const useGalleries = () => {
         },
       ];
 
-      setGalleries(mockGalleries);
+      // Also load user galleries from localStorage
+      const userGalleries = JSON.parse(localStorage.getItem('userGalleries') || '[]');
+
+      // Combine mock galleries with user galleries
+      const allGalleries = [...mockGalleries, ...userGalleries];
+
+      setGalleries(allGalleries);
     } catch (err) {
       console.error('Error fetching galleries:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch galleries');
@@ -136,7 +142,7 @@ export const useGalleries = () => {
     try {
       // Extract blob ID from Walrus URI
       const blobId = galleryUri.replace('https://blob.walrus.testnet.space/', '');
-      
+
       // Read the gallery metadata from Walrus
       const galleryBlob = await walrusClient.getBlob({ blobId });
       const galleryFiles = await galleryBlob.files();
