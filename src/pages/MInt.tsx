@@ -31,6 +31,12 @@ function Mint() {
   const WAL_TYPE =
     "0x8270feb7375eee355e64fdb69c50abb6b5f9393a722883c1cf45f8e26048810a::wal::WAL";
 
+  // Your deployed Gallery NFT contract
+  const GALLERY_NFT_PACKAGE =
+    "0x0a30e0fc2edc10595a20edc73e5404a09e839a31d63aa70056f49f44b3e1b8c1";
+
+  const [accessTier, setAccessTier] = useState<string>("public");
+
   // Fetch balances
   const fetchBalances = async () => {
     if (!account) return;
@@ -116,27 +122,21 @@ function Mint() {
     );
   };
 
-  // Mint NFT
+  // Mint NFT using your deployed contract
   const handleMint = () => {
     if (!blobId || !account) return setUploadStatus("Upload image first");
     setUploadStatus("Minting NFT...");
 
     const txb = new Transaction();
 
-    // Create a simple display-based NFT using Sui's built-in functions
-    const nftName = txb.pure.string(nftName);
-    const nftDesc = txb.pure.string(nftDescription);
-    const imageUrl = txb.pure.string(`${AGGREGATOR}/v1/blobs/${blobId}`);
-
-    // Use the kiosk standard or create a simple object
-    // This is a workaround since devnet_nft module may not exist
     txb.moveCall({
-      target: "0x2::transfer::public_transfer",
+      target: `${GALLERY_NFT_PACKAGE}::gallery_nft::mint`,
       arguments: [
-        txb.object("0x2"), // Placeholder - this will fail but demonstrates the issue
-        txb.pure.address(account.address),
+        txb.pure.string(nftName),
+        txb.pure.string(nftDescription),
+        txb.pure.string(blobId),
+        txb.pure.string(accessTier),
       ],
-      typeArguments: ["0x2::coin::Coin<0x2::sui::SUI>"],
     });
 
     signAndExecute(
@@ -145,12 +145,22 @@ function Mint() {
       },
       {
         onSuccess: (result) => {
-          const nftObjectId = result.objectChanges?.find(
-            (change: any) => change.type === "created"
-          )?.objectId;
-          setUploadStatus(`Minted! NFT Object ID: ${nftObjectId}`);
+          console.log("Mint result:", result);
+          const nftObject = result.objectChanges?.find(
+            (change: any) =>
+              change.type === "created" &&
+              change.objectType?.includes("GalleryNFT")
+          );
+          if (nftObject) {
+            setUploadStatus(`Success! NFT Object ID: ${nftObject.objectId}`);
+          } else {
+            setUploadStatus(`NFT minted! Check transaction: ${result.digest}`);
+          }
         },
-        onError: (error) => setUploadStatus(`Mint failed: ${error}`),
+        onError: (error) => {
+          console.error("Mint error:", error);
+          setUploadStatus(`Mint failed: ${error}`);
+        },
       }
     );
   };
@@ -264,18 +274,11 @@ function Mint() {
 
         {/* Mint Section - Disabled until you deploy an NFT contract */}
         {blobId && (
-          <section className="p-6 border border-gray-200 rounded-lg bg-gray-50">
+          <section className="p-6 border border-gray-200 rounded-lg bg-gray-50 text-black">
             <h2 className="text-2xl font-semibold text-blue-600 mb-4">
               NFT Ready
             </h2>
-            <div className="mb-4 p-4 bg-yellow-50 border border-yellow-300 rounded">
-              <p className="text-yellow-800 font-semibold mb-2">Note:</p>
-              <p className="text-sm text-yellow-700">
-                The devnet_nft module doesn't exist on testnet. You need to
-                deploy your own NFT Move module to mint NFTs. Your image is
-                successfully uploaded to Walrus at the URL below.
-              </p>
-            </div>
+
             <input
               type="text"
               placeholder="NFT Name"
@@ -294,16 +297,15 @@ function Mint() {
             />
             <button
               onClick={handleMint}
-              disabled={true}
-              className="px-6 py-2 rounded-md text-white font-medium bg-gray-300 cursor-not-allowed"
+              className={`px-6 py-3 rounded-md text-white font-medium ${
+                !blobId || isPending
+                  ? "bg-gray-300 cursor-not-allowed"
+                  : "bg-blue-500 hover:bg-blue-600"
+              }`}
               title="Deploy your own NFT contract first"
             >
               Mint NFT (Contract Required)
             </button>
-            <p className="mt-2 text-sm text-gray-600">
-              Deploy an NFT Move module first, then update the target address in
-              the code.
-            </p>
           </section>
         )}
       </div>
