@@ -1,1 +1,2 @@
-export const GALLERY_NFT_PACKAGEID = "0x721ecbbdec56cce40cc616fca1ebb04f282e896fc09222f9666d7b599ba9501e"
+// Sui Gallery NFT Contract - Deployed to Testnet
+export const GALLERY_NFT_PACKAGEID = "0xf5eaa3a7133f481c6505bf17a22ba8b3acf5e0c8c531b64c749b8e4fdd2df345"

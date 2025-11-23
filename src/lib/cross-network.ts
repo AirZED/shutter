@@ -40,7 +40,7 @@ export class CrossNetworkManager {
     private suiClient: SuiClient;
 
     constructor() {
-        this.solanaConnection = new Connection('https://api.devnet.solana.com', 'confirmed');
+        this.solanaConnection = new Connection('https://api.testnet.solana.com', 'confirmed');
         this.suiClient = new SuiClient({
             url: getFullnodeUrl('testnet'),
         });
