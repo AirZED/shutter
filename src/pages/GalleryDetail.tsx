@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { MediaCard } from "@/components/MediaCard";
@@ -6,104 +6,100 @@ import { MediaDetailModal } from "@/components/MediaDetailModal";
 import { GalleryChatPanel } from "@/components/GalleryChatPanel";
 import { UploadModal } from "@/components/UploadModal";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Lock } from "lucide-react";
+import { ArrowLeft, Lock, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
-// Mock gallery data
-const mockGalleries = {
-  "1": {
-    id: "1",
-    title: "Sunset Photography Collection",
-    description: "A curated collection of breathtaking sunset photographs from around the world. Each image captures the unique beauty of golden hour.",
-    isLocked: false,
-    media: [
-      {
-        id: "1",
-        title: "Golden Beach Sunset",
-        type: "image" as const,
-        thumbnail: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&h=400&fit=crop",
-        isLocked: false,
-      },
-      {
-        id: "2",
-        title: "Mountain Twilight",
-        type: "image" as const,
-        thumbnail: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=400&h=400&fit=crop",
-        isLocked: false,
-      },
-      {
-        id: "3",
-        title: "Ocean Horizon",
-        type: "image" as const,
-        thumbnail: "https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=400&h=400&fit=crop",
-        isLocked: false,
-      },
-    ],
-  },
-  "2": {
-    id: "2",
-    title: "Exclusive NFT Art Gallery",
-    description: "Premium digital art collection accessible only to verified NFT holders. Features rare pieces from top crypto artists.",
-    isLocked: true,
-    requiredNFT: "CryptoPunks",
-    media: [
-      {
-        id: "4",
-        title: "Exclusive Art Piece #42",
-        type: "image" as const,
-        thumbnail: "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=400&h=400&fit=crop",
-        isLocked: true,
-        requiredNFT: "CryptoPunks",
-      },
-      {
-        id: "5",
-        title: "Digital Dreams",
-        type: "image" as const,
-        thumbnail: "https://images.unsplash.com/photo-1557672172-298e090bd0f1?w=400&h=400&fit=crop",
-        isLocked: true,
-        requiredNFT: "CryptoPunks",
-      },
-    ],
-  },
-  "3": {
-    id: "3",
-    title: "Product Showcase & Demos",
-    description: "Professional product photography and demonstration videos. Perfect for e-commerce and marketing materials.",
-    isLocked: false,
-    media: [
-      {
-        id: "6",
-        title: "Product Demo Video",
-        type: "video" as const,
-        thumbnail: "https://images.unsplash.com/photo-1492619375914-88005aa9e8fb?w=400&h=400&fit=crop",
-        isLocked: false,
-      },
-      {
-        id: "7",
-        title: "Studio Product Shots",
-        type: "image" as const,
-        thumbnail: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=400&fit=crop",
-        isLocked: false,
-      },
-    ],
-  },
-};
+import { useGalleries, Gallery } from "@/hooks/useGalleries";
+import { useWallet } from "@/contexts/WalletContext";
+import { GALLERY_NFT_PACKAGEID } from "@/lib/constants";
 
 const GalleryDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [isUploadOpen, setIsUploadOpen] = useState(false);
-  const [isWalletConnected, setIsWalletConnected] = useState(false);
   const [selectedMedia, setSelectedMedia] = useState<any>(null);
+  const [gallery, setGallery] = useState<Gallery | null>(null);
+  const [loading, setLoading] = useState(true);
+  const { connection, verifyNFT } = useWallet();
+  const { galleries, fetchGalleryById, fetchGalleryFromWalrus } = useGalleries();
+  const isWalletConnected = connection?.isConnected || false;
 
-  const gallery = mockGalleries[id as keyof typeof mockGalleries];
+  useEffect(() => {
+    const loadGallery = async () => {
+      if (!id) return;
+
+      setLoading(true);
+      try {
+        // First, try to find in the galleries list
+        let foundGallery = galleries.find(g => g.id === id);
+
+        // If not found, try localStorage
+        if (!foundGallery) {
+          const userGalleries = JSON.parse(localStorage.getItem('userGalleries') || '[]');
+          foundGallery = userGalleries.find((g: Gallery) => g.id === id);
+        }
+
+        // If still not found, try fetching from Walrus if we have a galleryUri
+        if (!foundGallery) {
+          // Try to fetch from Walrus using the ID pattern
+          // For now, we'll check if it's a user gallery in localStorage
+          const allUserGalleries = JSON.parse(localStorage.getItem('userGalleries') || '[]');
+          foundGallery = allUserGalleries.find((g: Gallery) => g.id === id);
+
+          // If we have a galleryUri, try fetching from Walrus
+          if (!foundGallery && foundGallery?.galleryUri) {
+            try {
+              const walrusGallery = await fetchGalleryFromWalrus(foundGallery.galleryUri);
+              if (walrusGallery) {
+                foundGallery = walrusGallery;
+              }
+            } catch (error) {
+              console.error('Error fetching from Walrus:', error);
+            }
+          }
+        }
+
+        // If still not found, try fetching from Walrus using HTTP API
+        if (!foundGallery) {
+          // Check if we can fetch from aggregator (for user-created galleries)
+          // This is a fallback - in production you'd have a registry
+          const userGalleries = JSON.parse(localStorage.getItem('userGalleries') || '[]');
+          foundGallery = userGalleries.find((g: Gallery) => g.id === id);
+        }
+
+        setGallery(foundGallery || null);
+      } catch (error) {
+        console.error('Error loading gallery:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load gallery",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadGallery();
+  }, [id, galleries]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading gallery...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!gallery) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-4xl font-bold mb-4">Gallery Not Found</h1>
+          <p className="text-muted-foreground mb-4">The gallery you're looking for doesn't exist.</p>
           <Button onClick={() => navigate("/")}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Home
@@ -113,18 +109,19 @@ const GalleryDetail = () => {
     );
   }
 
-  const handleConnectWallet = () => {
-    if (!isWalletConnected) {
-      toast({
-        title: "Wallet Connected",
-        description: "Successfully connected to MetaMask",
-      });
-      setIsWalletConnected(true);
-    }
-  };
+  // Convert gallery mediaUris to media format for display
+  const galleryMedia = gallery.mediaUris?.map((media, index) => ({
+    id: `${gallery.id}-media-${index}`,
+    title: media.name || `Media ${index + 1}`,
+    type: media.type,
+    thumbnail: media.uri,
+    uri: media.uri,
+    isLocked: gallery.isLocked || false,
+    requiredNFT: gallery.requiredNFT,
+  })) || [];
 
-  const handleMediaClick = (media: any) => {
-    if (media.isLocked && !isWalletConnected) {
+  const handleMediaClick = async (media: any) => {
+    if (gallery.isLocked && !isWalletConnected) {
       toast({
         title: "Connect Wallet",
         description: "Please connect your wallet to access this content",
@@ -132,22 +129,52 @@ const GalleryDetail = () => {
       });
       return;
     }
+
+    // If user is the gallery owner, they always have access
+    const isOwner = connection?.address?.toLowerCase() === gallery.owner?.toLowerCase();
+
+    // Verify NFT access if gallery is locked and user is not the owner
+    if (gallery.isLocked && isWalletConnected && !isOwner) {
+      try {
+        // Check for NFTs from the gallery_nft package
+        const hasAccess = await verifyNFT(gallery.requiredNFT || GALLERY_NFT_PACKAGEID, gallery.requiredTraits);
+        if (!hasAccess) {
+          toast({
+            title: "Access Denied",
+            description: "You don't have the required NFT to access this gallery.",
+            variant: "destructive",
+          });
+          return;
+        }
+      } catch (error) {
+        console.error("Error verifying NFT access:", error);
+        toast({
+          title: "Verification Error",
+          description: "Failed to verify your access. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     setSelectedMedia(media);
   };
 
   const isMediaAccessible = (media: any) => {
-    return !media.isLocked || isWalletConnected;
+    return !gallery.isLocked || isWalletConnected;
   };
 
-  const isGalleryAccessible = !gallery.isLocked || isWalletConnected;
+  // Check if user is the gallery owner
+  const isOwner = connection?.address?.toLowerCase() === gallery.owner?.toLowerCase();
+
+  // Gallery is accessible if: public, or user is owner, or user has connected wallet (will verify NFT on click)
+  const isGalleryAccessible = !gallery.isLocked || isOwner || isWalletConnected;
 
   if (!isGalleryAccessible) {
     return (
       <div className="min-h-screen bg-background">
         <Header
-          onUploadClick={() => setIsUploadOpen(true)}
-          onConnectWallet={handleConnectWallet}
-          isWalletConnected={isWalletConnected}
+          onUploadClick={() => navigate("/create")}
         />
         <main className="container mx-auto px-4 py-8">
           <Button onClick={() => navigate("/")} variant="ghost" className="mb-4">
@@ -159,10 +186,10 @@ const GalleryDetail = () => {
               <Lock className="h-16 w-16 mx-auto mb-4 text-locked" />
               <h2 className="text-2xl font-bold mb-2">Gallery Locked</h2>
               <p className="text-muted-foreground mb-4">
-                This gallery requires <span className="text-locked font-semibold">{"requiredNFT" in gallery ? gallery.requiredNFT : "specific NFT"}</span> to access
+                This gallery requires <span className="text-locked font-semibold">{gallery.requiredNFT || "specific NFT"}</span> to access
               </p>
-              <Button onClick={handleConnectWallet} variant="gradient">
-                Connect Wallet to Access
+              <Button onClick={() => navigate("/")} variant="gradient">
+                Back to Galleries
               </Button>
             </div>
           </div>
@@ -174,9 +201,7 @@ const GalleryDetail = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header
-        onUploadClick={() => setIsUploadOpen(true)}
-        onConnectWallet={handleConnectWallet}
-        isWalletConnected={isWalletConnected}
+        onUploadClick={() => navigate("/create")}
       />
       <main className="container mx-auto px-4 py-8">
         <Button onClick={() => navigate("/")} variant="ghost" className="mb-4">
@@ -191,19 +216,28 @@ const GalleryDetail = () => {
               <p className="text-muted-foreground">{gallery.description}</p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-              {gallery.media.map((media) => (
-                <MediaCard
-                  key={media.id}
-                  title={media.title}
-                  type={media.type}
-                  thumbnail={media.thumbnail}
-                  isLocked={media.isLocked}
-                  requiredNFT={media.requiredNFT}
-                  onClick={() => handleMediaClick(media)}
-                />
-              ))}
-            </div>
+            {galleryMedia.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                {galleryMedia.map((media) => (
+                  <MediaCard
+                    key={media.id}
+                    title={media.title}
+                    type={media.type}
+                    thumbnail={media.thumbnail}
+                    isLocked={media.isLocked}
+                    requiredNFT={media.requiredNFT}
+                    onClick={() => handleMediaClick(media)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground mb-4">No media in this gallery yet.</p>
+                <Button onClick={() => setIsUploadOpen(true)} variant="gradient">
+                  Add Media
+                </Button>
+              </div>
+            )}
           </div>
 
           <div className="lg:col-span-1">
@@ -215,7 +249,7 @@ const GalleryDetail = () => {
       </main>
 
       <UploadModal open={isUploadOpen} onOpenChange={setIsUploadOpen} />
-      
+
       <MediaDetailModal
         open={!!selectedMedia}
         onOpenChange={(open) => !open && setSelectedMedia(null)}

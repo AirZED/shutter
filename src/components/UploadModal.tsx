@@ -18,8 +18,8 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Upload, X, Plus, Trash2, Loader2 } from "lucide-react";
-import { useState, useRef } from "react";
+import { Upload, X, Plus, Trash2, Loader2, Image as ImageIcon, Video, Music, File, Sparkles, Lock, Globe, CheckCircle2, FolderPlus } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
 import { useWallet as useWalletContext } from "@/contexts/WalletContext";
 import {
   MediaFile,
@@ -28,19 +28,13 @@ import {
   mintGalleryNFT,
 } from "@/lib/nft-minting";
 import { useWalrusUpload } from "@/hooks/useWalrusUpload";
+import { useGalleries, Gallery } from "@/hooks/useGalleries";
 import { useToast } from "@/hooks/use-toast";
 import { GALLERY_NFT_PACKAGEID } from "@/lib/constants";
 import { Transaction } from "@mysten/sui/transactions";
-import { useSignAndExecuteTransaction } from "@mysten/dapp-kit";
-import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
-import { mplTokenMetadata } from "@metaplex-foundation/mpl-token-metadata";
-import { walletAdapterIdentity } from "@metaplex-foundation/umi-signer-wallet-adapters";
-import { generateSigner, percentAmount } from "@metaplex-foundation/umi";
-import { createProgrammableNft } from "@metaplex-foundation/mpl-token-metadata";
-import { clusterApiUrl, Connection, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { WalletAdapterNetwork } from "@solana/wallet-adapter-base";
-import { base58 } from "@metaplex-foundation/umi/serializers";
-import { useWallet as useSolanaWallet } from "@solana/wallet-adapter-react";
+import { useSignAndExecuteTransaction, useCurrentAccount } from "@mysten/dapp-kit";
+import { getFullnodeUrl, SuiClient } from "@mysten/sui/client";
+import axios from "axios";
 
 interface UploadModalProps {
   open: boolean;
@@ -53,10 +47,9 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [visibility, setVisibility] = useState<"public" | "private">("public");
-  const [selectedChain, setSelectedChain] = useState<"solana" | "sui">(
-    "solana"
-  );
   const [createGallery, setCreateGallery] = useState(false);
+  const [addToExistingGallery, setAddToExistingGallery] = useState(false);
+  const [selectedExistingGallery, setSelectedExistingGallery] = useState<string>("");
   const [galleryTitle, setGalleryTitle] = useState("");
   const [galleryDescription, setGalleryDescription] = useState("");
   const [mintNFTForGallery, setMintNFTForGallery] = useState(false);
@@ -72,23 +65,92 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
   const [newTraitKey, setNewTraitKey] = useState("");
   const [newTraitValue, setNewTraitValue] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string>("");
+  const [filePreviews, setFilePreviews] = useState<Record<number, string>>({});
+  const [walBalance, setWalBalance] = useState<string>("0");
+  const [suiBalance, setSuiBalance] = useState<string>("0");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const account = useCurrentAccount();
+  const suiClient = new SuiClient({
+    url: getFullnodeUrl("testnet"),
+  });
+
+  const PUBLISHER = "https://publisher.walrus-testnet.walrus.space";
+  const AGGREGATOR = "https://aggregator.walrus-testnet.walrus.space";
+  const WAL_TYPE = "0x8270feb7375eee355e64fdb69c50abb6b5f9393a722883c1cf45f8e26048810a::wal::WAL";
+
+  // Generate previews for image files
+  const generatePreview = (file: File, index: number) => {
+    if (file.type.startsWith("image/")) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setFilePreviews((prev) => ({
+          ...prev,
+          [index]: e.target?.result as string,
+        }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const { connection } = useWalletContext();
-  const { uploadMediaToWalrus, uploadGalleryToWalrus } = useWalrusUpload();
+  const { uploadMediaToWalrus, uploadGalleryToWalrus, updateGalleryInWalrus } = useWalrusUpload();
+  const { galleries, fetchGalleries } = useGalleries();
   const { mutateAsync: signAndExecuteTransaction } =
     useSignAndExecuteTransaction();
-  const solanaWallet = useSolanaWallet();
 
   console.log("connection", connection);
   const isConnected = connection?.isConnected || false;
   const address = connection?.address;
   const { toast } = useToast();
 
+  // Filter galleries to only show ones owned by current user
+  const userGalleries = galleries.filter(
+    (gallery) => gallery.owner.toLowerCase() === address?.toLowerCase()
+  );
+
+  // Fetch balances
+  const fetchBalances = async () => {
+    if (!account) return;
+    try {
+      const [walBal, suiBal] = await Promise.all([
+        suiClient.getBalance({
+          owner: account.address,
+          coinType: WAL_TYPE,
+        }),
+        suiClient.getBalance({
+          owner: account.address,
+        }),
+      ]);
+
+      setWalBalance((Number(walBal.totalBalance) / 1e9).toFixed(4));
+      setSuiBalance((Number(suiBal.totalBalance) / 1e9).toFixed(4));
+    } catch (error) {
+      console.error("Balance fetch failed:", error);
+    }
+  };
+
+  // Load galleries and balances when modal opens
+  useEffect(() => {
+    if (open && isConnected) {
+      fetchGalleries();
+      fetchBalances();
+    }
+  }, [open, isConnected, account]);
+
   const handleFileSelect = (files: FileList | null) => {
     if (files) {
       const newFiles = Array.from(files);
-      setSelectedFiles((prev) => [...prev, ...newFiles]);
+      const startIndex = selectedFiles.length;
+      setSelectedFiles((prev) => {
+        const updated = [...prev, ...newFiles];
+        // Generate previews for new files
+        newFiles.forEach((file, i) => {
+          generatePreview(file, startIndex + i);
+        });
+        return updated;
+      });
     }
   };
 
@@ -100,6 +162,34 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
 
   const removeFile = (index: number) => {
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+    setFilePreviews((prev) => {
+      const updated = { ...prev };
+      delete updated[index];
+      // Reindex remaining previews
+      const newPreviews: Record<number, string> = {};
+      Object.keys(updated).forEach((key) => {
+        const oldIndex = parseInt(key);
+        if (oldIndex > index) {
+          newPreviews[oldIndex - 1] = updated[oldIndex];
+        } else if (oldIndex < index) {
+          newPreviews[oldIndex] = updated[oldIndex];
+        }
+      });
+      return newPreviews;
+    });
+  };
+
+  const getFileIcon = (file: File) => {
+    if (file.type.startsWith("image/")) return <ImageIcon className="w-5 h-5" />;
+    if (file.type.startsWith("video/")) return <Video className="w-5 h-5" />;
+    if (file.type.startsWith("audio/")) return <Music className="w-5 h-5" />;
+    return <File className="w-5 h-5" />;
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(2) + " MB";
   };
 
   const addTrait = () => {
@@ -121,117 +211,56 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
     });
   };
 
-  // Mint NFT on Sui
+  // Mint NFT on Sui using the actual contract (from /mint)
   const mintSuiNFT = async (
-    mediaUri: string,
-    metadataUri: string,
+    blobId: string,
     name: string,
-    description: string
+    description: string,
+    accessTier: string = "public"
   ) => {
-    try {
-      const tx = new Transaction();
-      tx.moveCall({
-        target: `${GALLERY_NFT_PACKAGEID}::gallery_nft::mint`,
-        arguments: [
-          tx.pure.string(name),
-          tx.pure.string(description),
-          tx.pure.string(""), // walrus_blob_id (empty for external URLs)
-          tx.pure.string(mediaUri), // image_url
-          tx.pure.string(accessTier || "public"),
-        ],
-      });
-
-      const result = await signAndExecuteTransaction({
-        transaction: tx,
-      });
-
-      return {
-        transactionHash: result.digest,
-        chain: "sui" as const,
-      };
-    } catch (error) {
-      console.error("Error minting Sui NFT:", error);
-      throw new Error(
-        `Failed to mint Sui NFT: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
+    if (!blobId || !account) {
+      throw new Error("Missing blob ID or account");
     }
+
+    setUploadStatus("Minting NFT...");
+
+    const txb = new Transaction();
+
+    // Construct the full image URL from the blob ID (like in /mint)
+    const imageUrl = `${AGGREGATOR}/v1/blobs/${blobId}`;
+
+    console.log("Minting NFT with arguments:", {
+      name,
+      description,
+      walrus_blob_id: blobId,
+      image_url: imageUrl,
+      access_tier: accessTier,
+    });
+
+    // Use the actual gallery_nft contract call
+    txb.moveCall({
+      target: `${GALLERY_NFT_PACKAGEID}::gallery_nft::mint`,
+      arguments: [
+        txb.pure.string(name),
+        txb.pure.string(description),
+        txb.pure.string(blobId), // walrus_blob_id
+        txb.pure.string(imageUrl), // image_url
+        txb.pure.string(accessTier), // access_tier
+      ],
+    });
+
+    const result = await signAndExecuteTransaction({
+      transaction: txb,
+    });
+
+    await fetchBalances(); // Refresh balances after mint
+
+    return {
+      transactionHash: result.digest,
+      chain: "sui" as const,
+    };
   };
 
-  // Mint NFT on Solana
-  const mintSolanaNFT = async (
-    mediaUri: string,
-    metadataUri: string,
-    name: string,
-    description: string
-  ) => {
-    try {
-      if (!solanaWallet.publicKey || !solanaWallet.signTransaction) {
-        throw new Error("Solana wallet not connected");
-      }
-
-      const network = WalletAdapterNetwork.Testnet;
-      const endpoint = clusterApiUrl(network);
-      const connection = new Connection(endpoint);
-
-      const umi = createUmi(endpoint)
-        .use(mplTokenMetadata())
-        .use(walletAdapterIdentity(solanaWallet));
-
-      const mint = generateSigner(umi);
-      const metadata = {
-        name,
-        symbol: collectionSymbol || "GALLERY",
-        description,
-        image: mediaUri,
-        external_url: mediaUri,
-        attributes: [
-          {
-            trait_type: "Gallery Access",
-            value: "Premium",
-          },
-          {
-            trait_type: "Chain",
-            value: "Solana",
-          },
-        ],
-      };
-
-      const metadataUri = `https://aggregator.walrus-testnet.walrus.space/v1/blobs/${Date.now()}`;
-
-      const nft = await createProgrammableNft(umi, {
-        mint,
-        name: metadata.name,
-        symbol: metadata.symbol,
-        uri: metadataUri,
-        sellerFeeBasisPoints: percentAmount(0),
-        creators: [
-          {
-            address: solanaWallet.publicKey,
-            verified: true,
-            percentage: 100,
-          },
-        ],
-        isMutable: true,
-        isCollection: false,
-      });
-
-      await nft.sendAndConfirm(umi);
-
-      return {
-        transactionHash: base58.deserialize(nft.signature)[0],
-        chain: "solana" as const,
-      };
-    } catch (error) {
-      console.error("Error minting Solana NFT:", error);
-      throw new Error(
-        `Failed to mint Solana NFT: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
-    }
-  };
 
   const handleUpload = async () => {
     if (!isConnected) {
@@ -252,16 +281,32 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
       return;
     }
 
+    if (addToExistingGallery && !selectedExistingGallery) {
+      toast({
+        title: "Gallery Not Selected",
+        description: "Please select a gallery to add files to",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsUploading(true);
 
     try {
+      setUploadStatus("Uploading media to Walrus...");
+
       // Always upload all media to Walrus first
       const mediaUris: {
         name: string;
         uri: string;
+        blobId: string;
         type: "image" | "video" | "audio";
       }[] = [];
-      for (const file of selectedFiles) {
+
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        setUploadStatus(`Uploading ${i + 1}/${selectedFiles.length} files...`);
+
         const mediaFile: MediaFile = {
           file,
           name: title || file.name,
@@ -269,27 +314,51 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
           type: file.type.startsWith("image/")
             ? "image"
             : file.type.startsWith("video/")
-            ? "video"
-            : "audio",
+              ? "video"
+              : "audio",
         };
         const { imageUri } = await uploadMediaToWalrus(mediaFile);
+
+        // Extract blob ID from URI (format: https://aggregator.walrus-testnet.walrus.space/v1/blobs/{blobId})
+        const blobId = imageUri.replace("https://aggregator.walrus-testnet.walrus.space/v1/blobs/", "").replace("https://blob.walrus.testnet.space/", "");
+
         mediaUris.push({
           name: mediaFile.name,
           uri: imageUri,
+          blobId,
           type: mediaFile.type,
         });
       }
 
+      setUploadStatus(`Successfully uploaded ${selectedFiles.length} files to Walrus`);
       toast({
         title: "Media Uploaded",
         description: `Successfully uploaded ${selectedFiles.length} files to Walrus`,
       });
 
       let galleryId: string | undefined = undefined;
+      let updatedGalleryUri: string | undefined = undefined;
 
-      // Create gallery if selected
-      if (createGallery && galleryTitle) {
-        galleryId = `${selectedChain}_gallery_${Date.now()}_${Math.random()
+      // Add to existing gallery if selected
+      if (addToExistingGallery && selectedExistingGallery) {
+        const existingGallery = userGalleries.find(g => g.id === selectedExistingGallery);
+        if (existingGallery) {
+          const { galleryUri: newGalleryUri, transactionHash } = await updateGalleryInWalrus(
+            existingGallery.galleryUri,
+            mediaUris
+          );
+          updatedGalleryUri = newGalleryUri;
+          galleryId = existingGallery.id;
+
+          toast({
+            title: "Gallery Updated",
+            description: `Successfully added ${selectedFiles.length} media files to "${existingGallery.title}" (Tx: ${transactionHash})`,
+          });
+        }
+      }
+      // Create new gallery if selected
+      else if (createGallery && galleryTitle) {
+        galleryId = `sui_gallery_${Date.now()}_${Math.random()
           .toString(36)
           .substr(2, 9)}`;
 
@@ -300,7 +369,7 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
           mediaUris,
           address!,
           visibility,
-          selectedChain,
+          "sui",
           {
             type: accessControl,
             requiredNFT: accessControl !== "public" ? requiredNFT : undefined,
@@ -315,50 +384,48 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
         });
       }
 
-      // Mint NFT for gallery access if selected and private
-      if (mintNFTForGallery && visibility === "private" && galleryId) {
+      // Mint NFT for gallery access if selected and private (only for new galleries)
+      if (mintNFTForGallery && visibility === "private" && galleryId && !addToExistingGallery) {
         try {
           const nftName = collectionName || `${galleryTitle} Access`;
-          const nftDescription = `Access pass for gallery: ${galleryTitle}`;
+          const nftDescription = collectionSymbol || `Access pass for gallery: ${galleryTitle}`;
 
-          let mintResult;
-          if (selectedChain === "sui") {
-            // Use the first media URI for Sui minting
-            const firstMedia = mediaUris[0];
-            if (!firstMedia) {
-              throw new Error("No media available for minting");
-            }
-            mintResult = await mintSuiNFT(
-              firstMedia.uri,
-              firstMedia.uri,
-              nftName,
-              nftDescription
-            );
-          } else {
-            // Use the first media URI for Solana minting
-            const firstMedia = mediaUris[0];
-            if (!firstMedia) {
-              throw new Error("No media available for minting");
-            }
-            mintResult = await mintSolanaNFT(
-              firstMedia.uri,
-              firstMedia.uri,
-              nftName,
-              nftDescription
-            );
+          // Use the first media for Sui minting - need blob ID
+          const firstMedia = mediaUris[0];
+          if (!firstMedia || !firstMedia.blobId) {
+            throw new Error("No media available for minting");
           }
 
+          setUploadStatus("Minting NFT...");
+          const mintResult = await mintSuiNFT(
+            firstMedia.blobId,
+            nftName,
+            nftDescription,
+            visibility === "private" ? "exclusive" : "public"
+          );
+
+          setUploadStatus(`✅ NFT minted successfully! Tx: ${mintResult.transactionHash}`);
           toast({
             title: "NFT Minted",
-            description: `Successfully minted access NFT for gallery "${galleryTitle}" on ${selectedChain} (Tx: ${mintResult.transactionHash})`,
+            description: `Successfully minted access NFT for gallery "${galleryTitle}" on Sui`,
+            action: (
+              <a
+                href={`https://testnet.suivision.xyz/txblock/${mintResult.transactionHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                View Transaction
+              </a>
+            ),
           });
         } catch (error) {
           console.error("Error minting NFT:", error);
+          setUploadStatus(`❌ NFT minting failed: ${error instanceof Error ? error.message : "Unknown error"}`);
           toast({
             title: "NFT Minting Failed",
-            description: `Failed to mint NFT: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            description: `Failed to mint NFT: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
             variant: "destructive",
           });
         }
@@ -366,10 +433,13 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
 
       // Reset form
       setSelectedFiles([]);
+      setFilePreviews({});
       setTitle("");
       setDescription("");
       setVisibility("public");
       setCreateGallery(false);
+      setAddToExistingGallery(false);
+      setSelectedExistingGallery("");
       setGalleryTitle("");
       setGalleryDescription("");
       setMintNFTForGallery(false);
@@ -395,16 +465,85 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] glass-card border-border max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[800px] glass-card border-border max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-2xl font-bold">
-            Create Gallery
+          <DialogTitle className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            🎨 Create Gallery & Mint NFT
           </DialogTitle>
-          <DialogDescription className="text-base">
-            Upload your media files to Walrus storage and create a gallery with
-            optional NFT access control
+          <DialogDescription className="text-base mt-2">
+            Upload your media to decentralized storage and create an NFT-gated gallery
           </DialogDescription>
         </DialogHeader>
+
+        {/* Balance Display - Like /mint */}
+        {isConnected && account && (
+          <div className="mb-6 p-5 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border border-gray-200 dark:border-gray-700 rounded-2xl shadow-lg">
+            <div className="grid grid-cols-2 gap-4 text-center">
+              <div className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 rounded-xl">
+                <div className="flex items-center justify-center mb-2">
+                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center mr-2">
+                    <span className="text-white font-bold text-sm">W</span>
+                  </div>
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-300">WAL Balance</p>
+                </div>
+                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{walBalance}</p>
+              </div>
+              <div className="p-4 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 rounded-xl">
+                <div className="flex items-center justify-center mb-2">
+                  <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center mr-2">
+                    <span className="text-white font-bold text-sm">S</span>
+                  </div>
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-300">SUI Balance</p>
+                </div>
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400">{suiBalance}</p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchBalances}
+              className="mt-4 w-full"
+            >
+              🔄 Refresh Balances
+            </Button>
+
+            {/* Low Balance Warning */}
+            {parseFloat(walBalance) < 0.01 && (
+              <div className="mt-4 p-4 bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-950 dark:to-orange-950 border border-red-200 dark:border-red-800 rounded-xl">
+                <div className="flex items-start">
+                  <div className="flex-shrink-0">
+                    <div className="w-8 h-8 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center">
+                      <span className="text-red-600 dark:text-red-400 text-lg">⚠️</span>
+                    </div>
+                  </div>
+                  <div className="ml-3 flex-1">
+                    <h3 className="text-red-800 dark:text-red-200 font-bold text-sm mb-1">Low WAL Balance</h3>
+                    <p className="text-red-700 dark:text-red-300 text-xs mb-2">
+                      You need WAL tokens to upload files. Get some from the faucet.
+                    </p>
+                    <a
+                      href="https://faucet.walrus.site/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-lg hover:from-red-600 hover:to-orange-600 text-xs font-medium transition-all"
+                    >
+                      🚰 Get WAL Tokens
+                    </a>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Status Display */}
+        {uploadStatus && (
+          <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-xl">
+            <p className="text-sm text-blue-800 dark:text-blue-200 font-medium">
+              <span className="font-bold">Status:</span> {uploadStatus}
+            </p>
+          </div>
+        )}
 
         <Tabs defaultValue="upload" className="space-y-4">
           <TabsList className="grid w-full grid-cols-2">
@@ -412,49 +551,51 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
             <TabsTrigger value="gallery">Gallery & NFT Settings</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="upload" className="space-y-4">
+          <TabsContent value="upload" className="space-y-6">
             <div
-              className={`border-2 border-dashed rounded-xl p-12 text-center transition-all duration-200 ${
-                dragActive
-                  ? "border-primary bg-primary/5 scale-[1.02]"
-                  : "border-border hover:border-primary/50 hover:bg-muted/30"
-              }`}
+              className={`border-2 border-dashed rounded-2xl p-16 text-center transition-all duration-300 ${dragActive
+                ? "border-primary bg-gradient-to-br from-primary/10 via-primary/5 to-transparent scale-[1.01] shadow-lg shadow-primary/20"
+                : "border-border hover:border-primary/50 hover:bg-muted/30"
+                }`}
               onDragEnter={() => setDragActive(true)}
               onDragLeave={() => setDragActive(false)}
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
             >
-              <div className="flex flex-col items-center space-y-4">
+              <div className="flex flex-col items-center space-y-6">
                 <div
-                  className={`p-4 rounded-full transition-colors ${
-                    dragActive ? "bg-primary/10" : "bg-muted/50"
-                  }`}
+                  className={`p-6 rounded-2xl transition-all duration-300 ${dragActive
+                    ? "bg-gradient-to-br from-primary/20 to-primary/10 scale-110"
+                    : "bg-gradient-to-br from-muted/50 to-muted/30"
+                    }`}
                 >
                   <Upload
-                    className={`w-8 h-8 transition-colors ${
-                      dragActive ? "text-primary" : "text-muted-foreground"
-                    }`}
+                    className={`w-12 h-12 transition-all duration-300 ${dragActive ? "text-primary scale-110" : "text-muted-foreground"
+                      }`}
                   />
                 </div>
-                <div className="space-y-2">
-                  <p className="text-lg font-medium">
-                    {dragActive ? "Drop your files here" : "Upload your media"}
+                <div className="space-y-3">
+                  <p className="text-xl font-semibold">
+                    {dragActive ? "✨ Drop your files here" : "Upload Your Media"}
                   </p>
-                  <p className="text-sm text-muted-foreground">
-                    Drag and drop your files here, or click to browse
+                  <p className="text-sm text-muted-foreground max-w-md">
+                    Drag and drop your files here, or click the button below to browse
                   </p>
-                  <p className="text-xs text-muted-foreground">
-                    Supports images, videos, and audio files
-                  </p>
+                  <div className="flex items-center justify-center gap-2 pt-2">
+                    <ImageIcon className="w-4 h-4 text-muted-foreground" />
+                    <Video className="w-4 h-4 text-muted-foreground" />
+                    <Music className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">Images, Videos, Audio</span>
+                  </div>
                 </div>
                 <Button
-                  variant="outline"
+                  variant="gradient"
                   size="lg"
                   onClick={() => fileInputRef.current?.click()}
-                  className="mt-4"
+                  className="mt-2 px-8 py-6 text-base"
                 >
-                  <Upload className="w-4 h-4 mr-2" />
-                  Browse Files
+                  <Upload className="w-5 h-5 mr-2" />
+                  Choose Files
                 </Button>
               </div>
               <input
@@ -468,56 +609,77 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
             </div>
 
             {selectedFiles.length > 0 && (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <Label className="text-base font-medium">
-                    Selected Files ({selectedFiles.length})
-                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="text-sm px-3 py-1">
+                      {selectedFiles.length} {selectedFiles.length === 1 ? "File" : "Files"} Selected
+                    </Badge>
+                  </div>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setSelectedFiles([])}
+                    onClick={() => {
+                      setSelectedFiles([]);
+                      setFilePreviews({});
+                    }}
                     className="text-muted-foreground hover:text-destructive"
                   >
+                    <Trash2 className="w-4 h-4 mr-1" />
                     Clear All
                   </Button>
                 </div>
-                <div className="space-y-2 max-h-40 overflow-y-auto">
-                  {selectedFiles.map((file, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border"
-                    >
-                      <div className="flex items-center space-x-3 flex-1 min-w-0">
-                        <div className="w-8 h-8 bg-primary/10 rounded flex items-center justify-center">
-                          <Upload className="w-4 h-4 text-primary" />
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 max-h-64 overflow-y-auto p-1">
+                  {selectedFiles.map((file, index) => {
+                    const preview = filePreviews[index];
+                    const isImage = file.type.startsWith("image/");
+                    return (
+                      <div
+                        key={index}
+                        className="group relative aspect-square rounded-xl overflow-hidden border-2 border-border bg-muted/30 hover:border-primary/50 transition-all duration-200"
+                      >
+                        {isImage && preview ? (
+                          <img
+                            src={preview}
+                            alt={file.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-muted/50 to-muted/30">
+                            <div className="p-3 rounded-full bg-primary/10 mb-2">
+                              {getFileIcon(file)}
+                            </div>
+                            <p className="text-xs font-medium text-center px-2 truncate w-full">
+                              {file.name}
+                            </p>
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => removeFile(index)}
+                            className="h-8 w-8 rounded-full p-0"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {file.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {(file.size / 1024 / 1024).toFixed(2)} MB
-                          </p>
+                        <div className="absolute top-2 right-2">
+                          <Badge variant="secondary" className="text-xs">
+                            {formatFileSize(file.size)}
+                          </Badge>
                         </div>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeFile(index)}
-                        className="text-muted-foreground hover:text-destructive"
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
 
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="title" className="text-base font-medium">
+            <div className="space-y-6 pt-4">
+              <div className="space-y-3">
+                <Label htmlFor="title" className="text-base font-semibold flex items-center gap-2">
+                  <File className="w-4 h-4" />
                   Media Title
                 </Label>
                 <Input
@@ -525,219 +687,227 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
                   placeholder="Enter a title for your media"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="h-11"
+                  className="h-12 text-base"
                 />
                 <p className="text-xs text-muted-foreground">
-                  This title will be applied to all uploaded media
+                  This title will be applied to all uploaded media files
                 </p>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="description" className="text-base font-medium">
+              <div className="space-y-3">
+                <Label htmlFor="description" className="text-base font-semibold">
                   Description
                 </Label>
                 <Textarea
                   id="description"
-                  placeholder="Describe your media content"
+                  placeholder="Describe your media content, theme, or story..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="min-h-[100px] resize-none"
+                  className="min-h-[120px] resize-none text-base"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Provide context about your media
+                  Provide context and details about your media collection
                 </p>
               </div>
-              <div className="space-y-2">
-                <Label className="text-base font-medium">Visibility</Label>
+              <div className="space-y-3">
+                <Label className="text-base font-semibold flex items-center gap-2">
+                  <Globe className="w-4 h-4" />
+                  Visibility Settings
+                </Label>
                 <Select
                   value={visibility}
                   onValueChange={(value: "public" | "private") =>
                     setVisibility(value)
                   }
                 >
-                  <SelectTrigger className="h-11">
+                  <SelectTrigger className="h-12 text-base">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="public">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span>Public - Anyone can view</span>
+                      <div className="flex items-center space-x-3 py-1">
+                        <Globe className="w-4 h-4 text-green-500" />
+                        <div>
+                          <div className="font-medium">Public Gallery</div>
+                          <div className="text-xs text-muted-foreground">Anyone can view</div>
+                        </div>
                       </div>
                     </SelectItem>
                     <SelectItem value="private">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-                        <span>Private - NFT holders only</span>
+                      <div className="flex items-center space-x-3 py-1">
+                        <Lock className="w-4 h-4 text-orange-500" />
+                        <div>
+                          <div className="font-medium">Private Gallery</div>
+                          <div className="text-xs text-muted-foreground">NFT holders only</div>
+                        </div>
                       </div>
                     </SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">
-                  {visibility === "public"
-                    ? "Your gallery will be visible to everyone"
-                    : "Only users with the required NFT can access your gallery"}
-                </p>
+                <div className={`p-3 rounded-lg border ${visibility === "public"
+                  ? "bg-green-50/50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
+                  : "bg-orange-50/50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800"
+                  }`}>
+                  <p className="text-xs text-muted-foreground">
+                    {visibility === "public"
+                      ? "🌐 Your gallery will be visible and accessible to everyone"
+                      : "🔒 Only users with the required NFT can access your gallery"}
+                  </p>
+                </div>
               </div>
             </div>
           </TabsContent>
 
           <TabsContent value="gallery" className="space-y-6">
             <div className="space-y-4">
-              <div className="flex items-center space-x-3 p-4 bg-muted/30 rounded-lg border">
+              {/* Add to Existing Gallery Option */}
+              {userGalleries.length > 0 ? (
+                <div className="flex items-start space-x-4 p-5 bg-gradient-to-br from-blue-500/5 to-blue-500/10 rounded-xl border-2 border-blue-500/20 hover:border-blue-500/40 transition-all">
+                  <input
+                    type="checkbox"
+                    id="addToExistingGallery"
+                    checked={addToExistingGallery}
+                    onChange={(e) => {
+                      setAddToExistingGallery(e.target.checked);
+                      if (e.target.checked) {
+                        setCreateGallery(false);
+                      }
+                    }}
+                    className="w-5 h-5 rounded border-border mt-1 cursor-pointer"
+                  />
+                  <div className="flex-1">
+                    <Label
+                      htmlFor="addToExistingGallery"
+                      className="text-lg font-semibold cursor-pointer flex items-center gap-2"
+                    >
+                      <FolderPlus className="w-5 h-5 text-blue-500" />
+                      Add to Existing Gallery
+                    </Label>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Add these files to one of your existing galleries
+                    </p>
+                    {addToExistingGallery && (
+                      <div className="mt-4 space-y-2">
+                        <Label className="text-sm font-medium">Select Gallery</Label>
+                        <Select
+                          value={selectedExistingGallery}
+                          onValueChange={setSelectedExistingGallery}
+                        >
+                          <SelectTrigger className="h-11">
+                            <SelectValue placeholder="Choose a gallery..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {userGalleries.map((gallery) => (
+                              <SelectItem key={gallery.id} value={gallery.id}>
+                                <div className="flex items-center gap-3 py-1">
+                                  <div className="w-10 h-10 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+                                    {gallery.thumbnail ? (
+                                      <img
+                                        src={gallery.thumbnail}
+                                        alt={gallery.title}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center">
+                                        <FolderPlus className="w-5 h-5 text-muted-foreground" />
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-medium truncate">{gallery.title}</div>
+                                    <div className="text-xs text-muted-foreground">
+                                      {gallery.mediaCount} items • {gallery.visibility}
+                                    </div>
+                                  </div>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 bg-muted/30 rounded-xl border border-dashed">
+                  <p className="text-sm text-muted-foreground text-center">
+                    You don't have any galleries yet. Create your first gallery to get started!
+                  </p>
+                </div>
+              )}
+
+              {/* Create New Gallery Option */}
+              <div className="flex items-start space-x-4 p-5 bg-gradient-to-br from-primary/5 to-primary/10 rounded-xl border-2 border-primary/20 hover:border-primary/40 transition-all">
                 <input
                   type="checkbox"
                   id="createGallery"
                   checked={createGallery}
-                  onChange={(e) => setCreateGallery(e.target.checked)}
-                  className="w-4 h-4 rounded border-border"
+                  onChange={(e) => {
+                    setCreateGallery(e.target.checked);
+                    if (e.target.checked) {
+                      setAddToExistingGallery(false);
+                      setSelectedExistingGallery("");
+                    }
+                  }}
+                  className="w-5 h-5 rounded border-border mt-1 cursor-pointer"
                 />
                 <div className="flex-1">
                   <Label
                     htmlFor="createGallery"
-                    className="text-base font-medium cursor-pointer"
+                    className="text-lg font-semibold cursor-pointer flex items-center gap-2"
                   >
+                    <Sparkles className="w-5 h-5 text-primary" />
                     Create New Gallery
                   </Label>
-                  <p className="text-sm text-muted-foreground">
-                    Organize your media into a curated gallery collection
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Organize your media into a beautifully curated gallery collection
                   </p>
                 </div>
               </div>
             </div>
 
             {createGallery && (
-              <div className="space-y-4 p-4 bg-muted/20 rounded-lg border">
-                <h3 className="text-lg font-semibold">Gallery Settings</h3>
-                <div className="space-y-4">
+              <div className="space-y-5 p-6 bg-gradient-to-br from-muted/30 to-muted/10 rounded-xl border-2 border-border">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-primary" />
+                  <h3 className="text-xl font-semibold">Gallery Settings</h3>
+                </div>
+                <div className="space-y-5">
                   <div className="space-y-2">
                     <Label
                       htmlFor="galleryTitle"
-                      className="text-base font-medium"
+                      className="text-base font-semibold"
                     >
                       Gallery Title
                     </Label>
                     <Input
                       id="galleryTitle"
-                      placeholder="Enter your gallery name"
+                      placeholder="e.g., My Photography Collection"
                       value={galleryTitle}
                       onChange={(e) => setGalleryTitle(e.target.value)}
-                      className="h-11"
+                      className="h-12 text-base"
                     />
                   </div>
                   <div className="space-y-2">
                     <Label
                       htmlFor="galleryDescription"
-                      className="text-base font-medium"
+                      className="text-base font-semibold"
                     >
                       Gallery Description
                     </Label>
                     <Textarea
                       id="galleryDescription"
-                      placeholder="Describe your gallery theme and content"
+                      placeholder="Describe your gallery theme, inspiration, and content..."
                       value={galleryDescription}
                       onChange={(e) => setGalleryDescription(e.target.value)}
-                      className="min-h-[100px] resize-none"
+                      className="min-h-[120px] resize-none text-base"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-base font-medium">
-                      Blockchain Network
-                    </Label>
-                    <Select
-                      value={selectedChain}
-                      onValueChange={(value: "solana" | "sui") =>
-                        setSelectedChain(value)
-                      }
-                    >
-                      <SelectTrigger className="h-11">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="solana">
-                          <div className="flex items-center space-x-2">
-                            <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                            <span>Solana</span>
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="sui">
-                          <div className="flex items-center space-x-2">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                            <span>Sui</span>
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      Choose the blockchain for NFT minting and access control
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
 
-            <div className="flex items-center space-x-3 p-4 bg-muted/30 rounded-lg border">
-              <input
-                type="checkbox"
-                id="mintNFTForGallery"
-                checked={mintNFTForGallery}
-                onChange={(e) => setMintNFTForGallery(e.target.checked)}
-                className="w-4 h-4 rounded border-border"
-              />
-              <div className="flex-1">
-                <Label
-                  htmlFor="mintNFTForGallery"
-                  className="text-base font-medium cursor-pointer"
-                >
-                  Mint Access NFT
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Create an NFT that grants access to your private gallery
-                </p>
-              </div>
-            </div>
-
-            {mintNFTForGallery && (
-              <div className="space-y-4 p-4 bg-muted/20 rounded-lg border">
-                <h3 className="text-lg font-semibold">
-                  NFT Collection Settings
-                </h3>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label
-                        htmlFor="collectionName"
-                        className="text-base font-medium"
-                      >
-                        Collection Name
-                      </Label>
-                      <Input
-                        id="collectionName"
-                        placeholder="Gallery Access Pass"
-                        value={collectionName}
-                        onChange={(e) => setCollectionName(e.target.value)}
-                        className="h-11"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label
-                        htmlFor="collectionSymbol"
-                        className="text-base font-medium"
-                      >
-                        Symbol
-                      </Label>
-                      <Input
-                        id="collectionSymbol"
-                        placeholder="GACCESS"
-                        value={collectionSymbol}
-                        onChange={(e) => setCollectionSymbol(e.target.value)}
-                        className="h-11"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-base font-medium">
-                      Access Control
+                  {/* Gallery Access Control */}
+                  <div className="space-y-3">
+                    <Label className="text-base font-semibold flex items-center gap-2">
+                      <Lock className="w-4 h-4" />
+                      Gallery Access Control
                     </Label>
                     <Select
                       value={accessControl}
@@ -745,89 +915,128 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
                         value: "public" | "nft_required" | "trait_required"
                       ) => setAccessControl(value)}
                     >
-                      <SelectTrigger className="h-11">
+                      <SelectTrigger className="h-12 text-base">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="public">
-                          <div className="flex items-center space-x-2">
-                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                            <span>Public Access</span>
+                          <div className="flex items-center space-x-3 py-1">
+                            <Globe className="w-4 h-4 text-green-500" />
+                            <div>
+                              <div className="font-medium">Public Access</div>
+                              <div className="text-xs text-muted-foreground">Open to everyone</div>
+                            </div>
                           </div>
                         </SelectItem>
                         <SelectItem value="nft_required">
-                          <div className="flex items-center space-x-2">
-                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                            <span>NFT Required</span>
+                          <div className="flex items-center space-x-3 py-1">
+                            <Lock className="w-4 h-4 text-blue-500" />
+                            <div>
+                              <div className="font-medium">NFT Required</div>
+                              <div className="text-xs text-muted-foreground">Any NFT from collection</div>
+                            </div>
                           </div>
                         </SelectItem>
                         <SelectItem value="trait_required">
-                          <div className="flex items-center space-x-2">
-                            <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                            <span>Specific Traits Required</span>
+                          <div className="flex items-center space-x-3 py-1">
+                            <Sparkles className="w-4 h-4 text-purple-500" />
+                            <div>
+                              <div className="font-medium">Specific Traits Required</div>
+                              <div className="text-xs text-muted-foreground">Custom trait matching</div>
+                            </div>
                           </div>
                         </SelectItem>
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
-                      Define who can access your gallery
+                      Define the access requirements for your gallery
                     </p>
                   </div>
 
                   {accessControl === "nft_required" && (
-                    <div>
-                      <Label htmlFor="requiredNFT">Required NFT Contract</Label>
+                    <div className="space-y-2">
+                      <Label htmlFor="requiredNFT" className="text-base font-semibold">
+                        Required NFT Contract Address
+                      </Label>
                       <Input
                         id="requiredNFT"
                         placeholder="0x..."
                         value={requiredNFT}
                         onChange={(e) => setRequiredNFT(e.target.value)}
-                        className="glass-card border-border"
+                        className="h-12 text-base font-mono"
                       />
+                      <p className="text-xs text-muted-foreground">
+                        Enter the Sui NFT collection contract address
+                      </p>
                     </div>
                   )}
 
                   {accessControl === "trait_required" && (
-                    <div className="space-y-3">
-                      <Label>Required Traits</Label>
+                    <div className="space-y-4">
+                      <Label className="text-base font-semibold flex items-center gap-2">
+                        <Sparkles className="w-4 h-4" />
+                        Required Traits
+                      </Label>
                       <div className="flex gap-2">
                         <Input
-                          placeholder="Trait name"
+                          placeholder="Trait name (e.g., Rarity)"
                           value={newTraitKey}
                           onChange={(e) => setNewTraitKey(e.target.value)}
-                          className="glass-card border-border"
+                          className="h-11"
+                          onKeyPress={(e) => {
+                            if (e.key === "Enter" && newTraitKey && newTraitValue) {
+                              addTrait();
+                            }
+                          }}
                         />
                         <Input
-                          placeholder="Trait value"
+                          placeholder="Trait value (e.g., Legendary)"
                           value={newTraitValue}
                           onChange={(e) => setNewTraitValue(e.target.value)}
-                          className="glass-card border-border"
+                          className="h-11"
+                          onKeyPress={(e) => {
+                            if (e.key === "Enter" && newTraitKey && newTraitValue) {
+                              addTrait();
+                            }
+                          }}
                         />
-                        <Button type="button" onClick={addTrait} size="sm">
+                        <Button
+                          type="button"
+                          onClick={addTrait}
+                          size="lg"
+                          variant="gradient"
+                          disabled={!newTraitKey || !newTraitValue}
+                        >
                           <Plus className="w-4 h-4" />
                         </Button>
                       </div>
                       {Object.keys(requiredTraits).length > 0 && (
-                        <div className="flex flex-wrap gap-2">
-                          {Object.entries(requiredTraits).map(
-                            ([key, value]) => (
-                              <Badge
-                                key={key}
-                                variant="secondary"
-                                className="flex items-center gap-1"
-                              >
-                                {key}: {value}
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => removeTrait(key)}
-                                  className="h-4 w-4 p-0"
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-muted-foreground">
+                            Active Traits ({Object.keys(requiredTraits).length})
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {Object.entries(requiredTraits).map(
+                              ([key, value]) => (
+                                <Badge
+                                  key={key}
+                                  variant="secondary"
+                                  className="flex items-center gap-2 px-3 py-1.5 text-sm"
                                 >
-                                  <X className="w-3 h-3" />
-                                </Button>
-                              </Badge>
-                            )
-                          )}
+                                  <span className="font-medium">{key}:</span>
+                                  <span>{value}</span>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removeTrait(key)}
+                                    className="h-5 w-5 p-0 hover:bg-destructive/20 hover:text-destructive"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </Button>
+                                </Badge>
+                              )
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -835,37 +1044,167 @@ export const UploadModal = ({ open, onOpenChange }: UploadModalProps) => {
                 </div>
               </div>
             )}
+
+            <div className="flex items-start space-x-4 p-5 bg-gradient-to-br from-purple-500/10 to-blue-500/10 rounded-xl border-2 border-purple-500/20 hover:border-purple-500/40 transition-all">
+              <input
+                type="checkbox"
+                id="mintNFTForGallery"
+                checked={mintNFTForGallery}
+                onChange={(e) => setMintNFTForGallery(e.target.checked)}
+                className="w-5 h-5 rounded border-border mt-1 cursor-pointer"
+              />
+              <div className="flex-1">
+                <Label
+                  htmlFor="mintNFTForGallery"
+                  className="text-lg font-semibold cursor-pointer flex items-center gap-2"
+                >
+                  <Sparkles className="w-5 h-5 text-purple-500" />
+                  Mint Access NFT
+                </Label>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Create a unique NFT that grants exclusive access to your private gallery
+                </p>
+              </div>
+            </div>
+
+            {mintNFTForGallery && (
+              <div className="space-y-6 p-6 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-2 border-green-200 dark:border-green-800 rounded-xl">
+                <div className="text-center mb-6">
+                  <h3 className="text-2xl font-bold text-green-800 dark:text-green-200 mb-2">
+                    🎨 Mint Your NFT
+                  </h3>
+                  <p className="text-green-600 dark:text-green-400">Create your unique NFT tied to this gallery</p>
+                </div>
+                <div className="space-y-5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="collectionName"
+                        className="text-sm font-semibold text-gray-700 dark:text-gray-300"
+                      >
+                        NFT Name *
+                      </Label>
+                      <Input
+                        id="collectionName"
+                        placeholder="e.g., Gallery Access Pass"
+                        value={collectionName}
+                        onChange={(e) => setCollectionName(e.target.value)}
+                        className="h-12 text-base border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-green-500 bg-white/80 dark:bg-gray-900/80"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="accessTier"
+                        className="text-sm font-semibold text-gray-700 dark:text-gray-300"
+                      >
+                        Access Tier
+                      </Label>
+                      <Select
+                        value={visibility}
+                        onValueChange={(value: "public" | "private") => setVisibility(value)}
+                      >
+                        <SelectTrigger className="h-12 text-base border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-green-500 bg-white/80 dark:bg-gray-900/80">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="public">
+                            <span>🌍 Public (Free Access)</span>
+                          </SelectItem>
+                          <SelectItem value="private">
+                            <span>👑 Exclusive (VIP Only)</span>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="nftDescription"
+                      className="text-sm font-semibold text-gray-700 dark:text-gray-300"
+                    >
+                      Description *
+                    </Label>
+                    <Textarea
+                      id="nftDescription"
+                      placeholder="Describe your NFT and what access it grants..."
+                      value={collectionSymbol}
+                      onChange={(e) => setCollectionSymbol(e.target.value)}
+                      className="min-h-[120px] resize-none text-base border-gray-300 dark:border-gray-600 focus:ring-2 focus:ring-green-500 bg-white/80 dark:bg-gray-900/80"
+                    />
+                  </div>
+
+                  <div className="p-4 bg-white/60 dark:bg-gray-900/60 rounded-xl border border-green-200 dark:border-green-800">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 text-center">
+                      <span className="font-semibold text-green-700 dark:text-green-300">ℹ️</span> This will create a unique NFT that can gate access to your gallery and be traded on Sui marketplaces
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </TabsContent>
         </Tabs>
 
-        <div className="flex gap-3 justify-end pt-4 border-t">
+        <div className="flex gap-3 justify-end pt-6 border-t mt-6">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={isUploading}
-            className="px-6"
+            className="px-6 h-11"
           >
             Cancel
           </Button>
           <Button
             variant="gradient"
             onClick={handleUpload}
-            disabled={isUploading || selectedFiles.length === 0}
-            className="px-8"
+            disabled={
+              isUploading ||
+              selectedFiles.length === 0 ||
+              !isConnected ||
+              (addToExistingGallery && !selectedExistingGallery) ||
+              (createGallery && !galleryTitle)
+            }
+            className="px-8 h-11 text-base font-semibold"
           >
             {isUploading ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                {createGallery ? "Creating Gallery..." : "Uploading..."}
+                <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                {addToExistingGallery
+                  ? "Adding to Gallery..."
+                  : createGallery
+                    ? "Creating Gallery..."
+                    : "Uploading..."}
               </>
             ) : (
               <>
-                <Upload className="w-4 h-4 mr-2" />
-                {createGallery ? "Create Gallery" : "Upload Media"}
+                {addToExistingGallery ? (
+                  <>
+                    <FolderPlus className="w-5 h-5 mr-2" />
+                    Add to Gallery
+                  </>
+                ) : createGallery ? (
+                  <>
+                    <Sparkles className="w-5 h-5 mr-2" />
+                    Create Gallery
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-5 h-5 mr-2" />
+                    Upload Media
+                  </>
+                )}
               </>
             )}
           </Button>
         </div>
+        {!isConnected && (
+          <div className="mt-4 p-4 bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+            <p className="text-sm text-amber-800 dark:text-amber-200 flex items-center gap-2">
+              <Lock className="w-4 h-4" />
+              Please connect your wallet to upload media and create galleries
+            </p>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

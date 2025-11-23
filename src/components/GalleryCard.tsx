@@ -13,7 +13,7 @@ interface GalleryCardProps {
   isLocked: boolean;
   requiredNFT?: string;
   requiredTraits?: Record<string, string>;
-  chain?: 'solana' | 'sui';
+  chain?: 'sui';
   participantCount: number;
   onClick: () => void;
 }
@@ -26,7 +26,7 @@ export const GalleryCard = ({
   isLocked,
   requiredNFT,
   requiredTraits,
-  chain = 'solana',
+  chain = 'sui',
   participantCount,
   onClick,
 }: GalleryCardProps) => {
@@ -131,7 +131,7 @@ export const GalleryCard = ({
           {isLocked && (
             <Badge variant="destructive" className="glass-card">
               <Shield className="h-3 w-3 mr-1" />
-              {chain?.toUpperCase()}
+              NFT
             </Badge>
           )}
         </div>
