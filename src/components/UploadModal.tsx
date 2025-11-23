@@ -433,6 +433,8 @@ export const UploadModal = ({ open, onOpenChange, defaultGalleryId, onGalleryUpd
           const txb = new Transaction();
 
           // Step 1: Create gallery on-chain
+          // Galleries are always public - is_locked indicates NFT required for media viewing
+          const requiresNFT = visibility === "private" || mintNFTForGallery || accessControl !== "public";
           txb.moveCall({
             target: `${GALLERY_NFT_PACKAGEID}::gallery_nft::create_gallery`,
             arguments: [
@@ -441,9 +443,9 @@ export const UploadModal = ({ open, onOpenChange, defaultGalleryId, onGalleryUpd
               txb.pure.string(galleryDescription || description),
               txb.pure.string(mediaUris[0]?.uri || ""),
               txb.pure.u64(mediaUris.length),
-              txb.pure.bool(visibility === "private"),
+              txb.pure.bool(requiresNFT), // is_locked: true if NFT required for media
               txb.pure.string(accessControl !== "public" ? requiredNFT || "" : ""),
-              txb.pure.string(visibility),
+              txb.pure.string("public"), // visibility: always public - galleries are visible to everyone
               txb.pure.string(galleryUri),
             ],
           });
