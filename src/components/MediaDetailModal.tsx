@@ -88,7 +88,7 @@ export const MediaDetailModal = ({ open, onOpenChange, media, isAccessible }: Me
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl h-[90vh] p-0 gap-0">
+      <DialogContent className="max-w-6xl h-[90vh] p-0 gap-0 [&>button[class*='absolute']]:hidden">
         <div className="flex h-full">
           {/* Media Display */}
           <div className="flex-1 bg-black/50 flex items-center justify-center relative">
