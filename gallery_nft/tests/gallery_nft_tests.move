@@ -58,11 +58,11 @@ fun test_mint_nft() {
     {
         let nft = ts::take_from_sender<GalleryNFT>(&scenario);
 
-        assert!(gallery_nft::name(&nft) == string::utf8(b"My First Image"), 0);
-        assert!(gallery_nft::description(&nft) == string::utf8(b"This is my first uploaded image"), 1);
-        assert!(gallery_nft::walrus_blob_id(&nft) == string::utf8(b"QmTestBlobId12345"), 2);
+        assert!(gallery_nft::name(&nft) == b"My First Image".to_string(), 0);
+        assert!(gallery_nft::description(&nft) == b"This is my first uploaded image".to_string(), 1);
+        assert!(gallery_nft::walrus_blob_id(&nft) == b"QmTestBlobId12345".to_string(), 2);
         assert!(gallery_nft::creator(&nft) == USER1, 3);
-        assert!(gallery_nft::access_tier(&nft) == string::utf8(b"public"), 4);
+        assert!(gallery_nft::access_tier(&nft) == b"public".to_string(), 4);
 
         ts::return_to_sender(&scenario, nft);
     };
