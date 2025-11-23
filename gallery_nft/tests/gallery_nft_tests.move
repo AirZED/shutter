@@ -25,10 +25,10 @@ fun mint_test_nft(scenario: &mut Scenario, sender: address) {
     {
         let ctx = ts::ctx(scenario);
         gallery_nft::mint(
-            b"Sunset Photo",
-            b"Beautiful sunset at the beach",
-            b"QmAbCdEf123456789",
-            b"premium",
+            b"Sunset Photo".to_string(),
+            b"Beautiful sunset at the beach".to_string(),
+            b"QmAbCdEf123456789".to_string(),
+            b"premium".to_string(),
             ctx,
         );
     };
@@ -45,10 +45,10 @@ fun test_mint_nft() {
     {
         let ctx = ts::ctx(&mut scenario);
         gallery_nft::mint(
-            b"My First Image",
-            b"This is my first uploaded image",
-            b"QmTestBlobId12345",
-            b"public",
+            b"My First Image".to_string(),
+            b"This is my first uploaded image".to_string(),
+            b"QmTestBlobId12345".to_string(),
+            b"public".to_string(),
             ctx,
         );
     };
@@ -59,10 +59,7 @@ fun test_mint_nft() {
         let nft = ts::take_from_sender<GalleryNFT>(&scenario);
 
         assert!(gallery_nft::name(&nft) == string::utf8(b"My First Image"), 0);
-        assert!(
-            gallery_nft::description(&nft) == string::utf8(b"This is my first uploaded image"),
-            1,
-        );
+        assert!(gallery_nft::description(&nft) == string::utf8(b"This is my first uploaded image"), 1);
         assert!(gallery_nft::walrus_blob_id(&nft) == string::utf8(b"QmTestBlobId12345"), 2);
         assert!(gallery_nft::creator(&nft) == USER1, 3);
         assert!(gallery_nft::access_tier(&nft) == string::utf8(b"public"), 4);
@@ -82,10 +79,10 @@ fun test_mint_multiple_nfts() {
     {
         let ctx = ts::ctx(&mut scenario);
         gallery_nft::mint(
-            b"Image 1",
-            b"First image",
-            b"BlobId1",
-            b"public",
+            b"Image 1".to_string(),
+            b"First image".to_string(),
+            b"BlobId1".to_string(),
+            b"public".to_string(),
             ctx,
         );
     };
@@ -95,10 +92,10 @@ fun test_mint_multiple_nfts() {
     {
         let ctx = ts::ctx(&mut scenario);
         gallery_nft::mint(
-            b"Image 2",
-            b"Second image",
-            b"BlobId2",
-            b"premium",
+            b"Image 2".to_string(),
+            b"Second image".to_string(),
+            b"BlobId2".to_string(),
+            b"premium".to_string(),
             ctx,
         );
     };
@@ -208,10 +205,10 @@ fun test_has_access_tier() {
     {
         let ctx = ts::ctx(&mut scenario);
         gallery_nft::mint(
-            b"Premium Image",
-            b"Premium access only",
-            b"PremiumBlobId",
-            b"premium",
+            b"Premium Image".to_string(),
+            b"Premium access only".to_string(),
+            b"PremiumBlobId".to_string(),
+            b"premium".to_string(),
             ctx,
         );
     };
@@ -245,10 +242,10 @@ fun test_different_access_tiers() {
         {
             let ctx = ts::ctx(&mut scenario);
             gallery_nft::mint(
-                b"Test Image",
-                b"Test Description",
-                b"TestBlobId",
-                tier,
+                b"Test Image".to_string(),
+                b"Test Description".to_string(),
+                b"TestBlobId".to_string(),
+                tier.to_string(),
                 ctx,
             );
         };
@@ -277,10 +274,10 @@ fun test_view_functions() {
     {
         let ctx = ts::ctx(&mut scenario);
         gallery_nft::mint(
-            b"Test Name",
-            b"Test Description",
-            b"TestBlobId123",
-            b"premium",
+            b"Test Name".to_string(),
+            b"Test Description".to_string(),
+            b"TestBlobId123".to_string(),
+            b"premium".to_string(),
             ctx,
         );
     };
@@ -312,10 +309,10 @@ fun test_mint_with_empty_blob_id_fails() {
     {
         let ctx = ts::ctx(&mut scenario);
         gallery_nft::mint(
-            b"Test Name",
-            b"Test Description",
-            b"", // Empty blob ID
-            b"premium",
+            b"Test Name".to_string(),
+            b"Test Description".to_string(),
+            b"".to_string(), // Empty blob ID
+            b"premium".to_string(),
             ctx,
         );
     };
@@ -332,10 +329,10 @@ fun test_mint_with_empty_access_tier_fails() {
     {
         let ctx = ts::ctx(&mut scenario);
         gallery_nft::mint(
-            b"Test Name",
-            b"Test Description",
-            b"TestBlobId",
-            b"", // Empty access tier
+            b"Test Name".to_string(),
+            b"Test Description".to_string(),
+            b"TestBlobId".to_string(),
+            b"".to_string(), // Empty access tier
             ctx,
         );
     };
