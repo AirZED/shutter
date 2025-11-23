@@ -17,7 +17,6 @@
     "@metaplex-foundation/umi-bundle-defaults": "^1.4.1",
     "@metaplex-foundation/umi-rpc-web3js": "^1.4.1",
     "@metaplex-foundation/umi-signer-wallet-adapters": "^1.4.1",
-    "@metaplex-foundation/umi-uploader-irys": "^1.4.1",
     "@mysten/dapp-kit": "^0.19.0",
     "@mysten/sui": "^1.39.0",
     "@mysten/walrus": "^0.7.1",

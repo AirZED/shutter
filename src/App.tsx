@@ -42,7 +42,7 @@ const { networkConfig } = createNetworkConfig({
 
 // Solana setup
 const SolanaSetup = ({ children }: { children: React.ReactNode }) => {
-  const network = WalletAdapterNetwork.Devnet; // Switch to .Mainnet for production
+  const network = WalletAdapterNetwork.Testnet; // Switch to .Mainnet for production
   const endpoint = clusterApiUrl(network);
 
   const wallets = [
