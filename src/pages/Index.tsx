@@ -7,102 +7,20 @@ import { UploadModal } from "@/components/UploadModal";
 import { AIAssistant } from "@/components/AIAssistant";
 import { useToast } from "@/hooks/use-toast";
 import { useWallet } from "@/contexts/WalletContext";
-
-// Mock galleries data with enhanced NFT access control
-const mockGalleries = [
-  {
-    id: "1",
-    title: "Sunset Photography Collection",
-    description: "A curated collection of breathtaking sunset photographs from around the world",
-    thumbnail: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&h=400&fit=crop",
-    mediaCount: 12,
-    isLocked: false,
-    participantCount: 24,
-  },
-  {
-    id: "2",
-    title: "Exclusive Solana NFT Gallery",
-    description: "Premium digital art collection accessible only to verified Solana NFT holders",
-    thumbnail: "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=400&h=400&fit=crop",
-    mediaCount: 8,
-    isLocked: true,
-    requiredNFT: "0x1234567890abcdef1234567890abcdef12345678",
-    chain: 'solana' as const,
-    participantCount: 15,
-  },
-  {
-    id: "3",
-    title: "Product Showcase & Demos",
-    description: "Professional product photography and demonstration videos",
-    thumbnail: "https://images.unsplash.com/photo-1492619375914-88005aa9e8fb?w=400&h=400&fit=crop",
-    mediaCount: 18,
-    isLocked: false,
-    participantCount: 42,
-  },
-  {
-    id: "4",
-    title: "VIP Sui NFT Members",
-    description: "Exclusive content for Sui NFT holders with specific traits",
-    thumbnail: "https://images.unsplash.com/photo-1485579149621-3123dd979885?w=400&h=400&fit=crop",
-    mediaCount: 25,
-    isLocked: true,
-    requiredNFT: "0xabcdef1234567890abcdef1234567890abcdef12",
-    requiredTraits: {
-      "Rarity": "Legendary",
-      "Level": "10"
-    },
-    chain: 'sui' as const,
-    participantCount: 8,
-  },
-  {
-    id: "5",
-    title: "Nature & Wildlife",
-    description: "Stunning captures of nature's beauty and wildlife moments",
-    thumbnail: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=400&h=400&fit=crop",
-    mediaCount: 32,
-    isLocked: false,
-    participantCount: 67,
-  },
-  {
-    id: "6",
-    title: "Abstract Art Collection",
-    description: "Modern abstract art pieces from emerging digital artists",
-    thumbnail: "https://images.unsplash.com/photo-1557672172-298e090bd0f1?w=400&h=400&fit=crop",
-    mediaCount: 15,
-    isLocked: false,
-    participantCount: 31,
-  },
-  {
-    id: "7",
-    title: "Private Event Archive",
-    description: "Exclusive event photos and videos for Solana NFT holders",
-    thumbnail: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=400&h=400&fit=crop",
-    mediaCount: 45,
-    isLocked: true,
-    requiredNFT: "0x9876543210fedcba9876543210fedcba98765432",
-    chain: 'solana' as const,
-    participantCount: 12,
-  },
-  {
-    id: "8",
-    title: "Tech & Innovation",
-    description: "Cutting-edge technology and innovation showcase",
-    thumbnail: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=400&h=400&fit=crop",
-    mediaCount: 28,
-    isLocked: false,
-    participantCount: 89,
-  },
-];
+import { useGalleries } from "@/hooks/useGalleries";
+import { Loader2, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 const Index = () => {
   const navigate = useNavigate();
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const { connection, verifyNFT } = useWallet();
+  const { galleries, loading, error, fetchGalleries } = useGalleries();
   const isConnected = connection?.isConnected || false;
 
   const { toast } = useToast();
 
-  const handleGalleryClick = async (gallery: typeof mockGalleries[0]) => {
+  const handleGalleryClick = async (gallery: any) => {
     if (!gallery.isLocked) {
       navigate(`/gallery/${gallery.id}`);
       return;
@@ -153,31 +71,70 @@ const Index = () => {
       <main className="container mx-auto px-4 py-8">
         <HeroSection onGetStarted={() => setIsUploadOpen(true)} />
 
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold mb-2">Explore Galleries</h2>
-          <p className="text-muted-foreground">
-            Discover curated collections of media. Some galleries require specific NFTs to access.
-          </p>
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold mb-2">Explore Galleries</h2>
+            <p className="text-muted-foreground">
+              Discover curated collections of media. Some galleries require specific NFTs to access.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchGalleries}
+            disabled={loading}
+            className="flex items-center gap-2"
+          >
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            Refresh
+          </Button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {mockGalleries.map((gallery) => (
-            <GalleryCard
-              key={gallery.id}
-              id={gallery.id}
-              title={gallery.title}
-              description={gallery.description}
-              thumbnail={gallery.thumbnail}
-              mediaCount={gallery.mediaCount}
-              isLocked={gallery.isLocked}
-              requiredNFT={gallery.requiredNFT}
-              requiredTraits={gallery.requiredTraits}
-              chain={gallery.chain}
-              participantCount={gallery.participantCount}
-              onClick={() => handleGalleryClick(gallery)}
-            />
-          ))}
-        </div>
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
+              <p className="text-muted-foreground">Loading galleries...</p>
+            </div>
+          </div>
+        ) : error ? (
+          <div className="text-center py-12">
+            <p className="text-destructive mb-4">{error}</p>
+            <Button onClick={fetchGalleries} variant="outline">
+              Try Again
+            </Button>
+          </div>
+        ) : galleries.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-muted-foreground mb-4">No galleries found</p>
+            <Button onClick={() => setIsUploadOpen(true)} variant="gradient">
+              Create Your First Gallery
+            </Button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {galleries.map((gallery) => (
+              <GalleryCard
+                key={gallery.id}
+                id={gallery.id}
+                title={gallery.title}
+                description={gallery.description}
+                thumbnail={gallery.thumbnail}
+                mediaCount={gallery.mediaCount}
+                isLocked={gallery.isLocked}
+                requiredNFT={gallery.requiredNFT}
+                requiredTraits={gallery.requiredTraits}
+                chain={gallery.chain}
+                participantCount={gallery.participantCount}
+                onClick={() => handleGalleryClick(gallery)}
+              />
+            ))}
+          </div>
+        )}
       </main>
 
       <UploadModal open={isUploadOpen} onOpenChange={setIsUploadOpen} />
